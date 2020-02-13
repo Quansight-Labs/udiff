@@ -57,11 +57,12 @@ class DiffArray(np.ndarray):
         self.diffs[value] = np.array(1)
 
     def __getitem__(self, k):
-        diffs = ArrayDiffRegistry(self.shape)
-        for var, arr in self.diffs.items():
-            diffs[var] = arr[k]
+        arr = self._arr[k]
+        diffs = ArrayDiffRegistry(arr.shape)
+        for var, darr in self.diffs.items():
+            diffs[var] = darr[k]
 
-        return DiffArray(self._arr[k], diffs=diffs)
+        return DiffArray(arr, diffs=diffs)
 
     def __str__(self):
         return "<{}, name={}, arr=\n{}\n>".format(
