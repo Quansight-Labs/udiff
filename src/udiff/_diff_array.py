@@ -7,7 +7,7 @@ class DiffArray(np.ndarray):
             self._diffs = arr.diffs
             self._arr = arr.arr
             self._var = arr.var
-        
+
         from udiff import SKIP_SELF
         with SKIP_SELF:
             arr = np.asarray(arr)
