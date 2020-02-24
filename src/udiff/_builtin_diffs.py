@@ -41,7 +41,6 @@ register_diff(np.absolute, lambda x: x[1] * np.where(np.sign(x[0]) == 0, float('
 register_diff(np.positive, lambda x: +x[1])
 register_diff(np.negative, lambda x: -x[1])
 register_diff(np.conj, lambda x: np.conj(x[1]))
-# register_diff(np.conj, lambda x: np.conj(x[1]))
 register_diff(np.exp, lambda x: x[1] * np.exp(x[0]))
 register_diff(np.exp2, lambda x: x[1] * np.log(2) * np.exp2(x[0]))
 register_diff(np.log, lambda x: x[1] / x[0])
