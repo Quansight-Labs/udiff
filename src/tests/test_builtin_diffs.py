@@ -103,6 +103,12 @@ x = np.reshape(np.arange(25), (5, 5))
         (np.arcsin, lambda x: 1 / sqrt(1 - x ** 2)),
         (np.arccos, lambda x: -1 / sqrt(1 - x ** 2)),
         (np.arctan, lambda x: 1 / (1 + x ** 2)),
+        (np.arctanh, lambda x: 1 / (1 - x ** 2)),
+        (np.sinh, lambda x: cosh(x)),
+        (np.cosh, lambda x: sinh(x)),
+        (np.tanh, lambda x: 1 / cosh(x) ** 2),
+        (np.arcsinh, lambda x: 1 / sqrt(1 + x ** 2)),
+        (np.arccosh, lambda x: 1 / sqrt(-1 + x ** 2 )),
         (np.arctanh, lambda x: 1 / (1 - x ** 2))
     ],
 )
@@ -130,7 +136,10 @@ def test_unary_function(backend, method, y_d):
         (lambda x: np.power(2 * x + 1, 3), lambda x: 6 * np.power(2 * x + 1, 2)),
         (lambda x: np.sin(np.power(x, 2)) / np.power(np.sin(x), 2), lambda x: (2 * x * np.cos(np.power(x, 2)) * np.sin(x) - 2 * np.sin(np.power(x, 2)) * np.cos(x)) / np.power(np.sin(x), 3)),
         (lambda x: np.power(np.log(np.power(x, 3)), 1/3), lambda x: 2 * np.power(np.log(np.power(x, 2)), -2/3) / (3 * x)),
-        (lambda x: np.log((1 + x) / (1 - x)) / 4 - np.arctan(x) / 2, lambda x: np.power(x, 2) / (1 - np.power(x, 4)))
+        (lambda x: np.log((1 + x) / (1 - x)) / 4 - np.arctan(x) / 2, lambda x: np.power(x, 2) / (1 - np.power(x, 4))),
+        (lambda x: np.arctanh(3 * x ** 3 + x ** 2 +1), lambda x: (9 * x ** 2 + 2 * x) / (1 - np.power(3 * x ** 3 + x ** 2 + 1 , 2))),
+        (lambda x: np.sinh(np.cbrt(x)) + np.cosh(4 * x ** 3) , lambda x: np.cosh(np.cbrt(x)) / (3 * x ** (2/3)) + 12 * (x ** 2) * np.sinh(4 * x ** 3)),
+        (lambda x: np.log(1 + x ** 2) / np.arctanh(x), lambda x: ((2 * x * np.arctanh(x) / (1 + x ** 2)) - (np.log(1 + x ** 2)/(1 - x ** 2))) / np.power(np.arctanh(x) , 2))
     ],
 )
 def test_arbitrary_function(backend, func, y_d):
