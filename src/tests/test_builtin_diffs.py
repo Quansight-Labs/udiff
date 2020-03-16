@@ -6,6 +6,7 @@ import dask.array as da
 import udiff
 import sparse
 from math import *
+from random import uniform
 import unumpy.numpy_backend as NumpyBackend
 
 import unumpy.torch_backend as TorchBackend
@@ -81,40 +82,48 @@ def backend(request):
     backend = request.param
     return backend
 
-x = np.reshape(np.arange(25), (5, 5))
+def generate_test_data(n_elements=10, a=None, b=None):
+    if a is None:
+        a = -10
+    if b is None:
+        b = 10
+    x_arr = [uniform(a + 1e-3, b - 1e-3) for i in range(n_elements)]
+    return x_arr
 
 @pytest.mark.parametrize(
-    "method, y_d",
+    "method, y_d, domain",
     [
-        (np.positive, lambda x: 1),
-        (np.negative, lambda x: -1),
-        (np.exp, lambda x: pow(e, x)),
-        (np.exp2, lambda x: pow(2, x) * log(2)),
-        (np.log, lambda x: 1 / x),
-        (np.log2, lambda x: 1 / (x * log(2))),
-        (np.log10, lambda x: 1 / (x * log(10))),
-        (np.sqrt, lambda x: 0.5 * pow(x, -0.5)),
-        (np.square, lambda x: 2 * x),
-        (np.cbrt, lambda x: 1 / 3 * pow(x, -2 / 3)),
-        (np.reciprocal, lambda x: -1 / pow(x, 2)),
-        (np.sin, lambda x: cos(x)),
-        (np.cos, lambda x: -sin(x)),
-        (np.tan, lambda x: 1 / cos(x) ** 2),
-        (np.arcsin, lambda x: 1 / sqrt(1 - x ** 2)),
-        (np.arccos, lambda x: -1 / sqrt(1 - x ** 2)),
-        (np.arctan, lambda x: 1 / (1 + x ** 2)),
-        (np.arctanh, lambda x: 1 / (1 - x ** 2)),
-        (np.sinh, lambda x: cosh(x)),
-        (np.cosh, lambda x: sinh(x)),
-        (np.tanh, lambda x: 1 / cosh(x) ** 2),
-        (np.arcsinh, lambda x: 1 / sqrt(1 + x ** 2)),
-        (np.arccosh, lambda x: 1 / sqrt(-1 + x ** 2 )),
-        (np.arctanh, lambda x: 1 / (1 - x ** 2))
+        (np.positive, lambda x: 1, None),
+        (np.negative, lambda x: -1, None),
+        (np.exp, lambda x: pow(e, x), None),
+        (np.exp2, lambda x: pow(2, x) * log(2), None),
+        (np.log, lambda x: 1 / x, (0, None)),
+        (np.log2, lambda x: 1 / (x * log(2)), (0, None)),
+        (np.log10, lambda x: 1 / (x * log(10)), (0, None)),
+        (np.sqrt, lambda x: 0.5 * pow(x, -0.5), (0, None)),
+        (np.square, lambda x: 2 * x, None),
+        (np.cbrt, lambda x: 1 / 3 * pow(x, -2 / 3), (0, None)), # Negative numbers cannot be raised to a fractional power
+        (np.reciprocal, lambda x: -1 / pow(x, 2), (None, 0)),
+        (np.sin, lambda x: cos(x), None),
+        (np.cos, lambda x: -sin(x), None),
+        (np.tan, lambda x: 1 / cos(x) ** 2, None),
+        (np.arcsin, lambda x: 1 / sqrt(1 - x ** 2), (-1, 1)),
+        (np.arccos, lambda x: -1 / sqrt(1 - x ** 2), (-1, 1)),
+        (np.arctan, lambda x: 1 / (1 + x ** 2), None),
+        (np.sinh, lambda x: cosh(x), None),
+        (np.cosh, lambda x: sinh(x), (1, None)),
+        (np.tanh, lambda x: 1 / cosh(x) ** 2, (-1, 1)),
+        (np.arcsinh, lambda x: 1 / sqrt(1 + x ** 2), None),
+        (np.arccosh, lambda x: 1 / sqrt(-1 + x ** 2), (1, None)),
+        (np.arctanh, lambda x: 1 / (1 - x ** 2), (-1, 1))
     ],
 )
-def test_unary_function(backend, method, y_d):
-    x_arr = [0.2, 0.3]
-    y_d_arr = [y_d(xr) for xr in x_arr]
+def test_unary_function(backend, method, y_d, domain):
+    if domain is None:
+        x_arr = generate_test_data()
+    else:
+        x_arr = generate_test_data(a=domain[0], b=domain[1])
+    y_d_arr = [y_d(xa) for xa in x_arr]
     try:
         with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
             x = np.asarray(x_arr)
@@ -131,19 +140,22 @@ def test_unary_function(backend, method, y_d):
     assert_allclose(ret.diffs[x].arr, y_d_arr)
 
 @pytest.mark.parametrize(
-    "func, y_d",
+    "func, y_d, domain",
     [
-        (lambda x: np.power(2 * x + 1, 3), lambda x: 6 * np.power(2 * x + 1, 2)),
-        (lambda x: np.sin(np.power(x, 2)) / np.power(np.sin(x), 2), lambda x: (2 * x * np.cos(np.power(x, 2)) * np.sin(x) - 2 * np.sin(np.power(x, 2)) * np.cos(x)) / np.power(np.sin(x), 3)),
-        (lambda x: np.power(np.log(np.power(x, 3)), 1/3), lambda x: 2 * np.power(np.log(np.power(x, 2)), -2/3) / (3 * x)),
-        (lambda x: np.log((1 + x) / (1 - x)) / 4 - np.arctan(x) / 2, lambda x: np.power(x, 2) / (1 - np.power(x, 4))),
-        (lambda x: np.arctanh(3 * x ** 3 + x ** 2 +1), lambda x: (9 * x ** 2 + 2 * x) / (1 - np.power(3 * x ** 3 + x ** 2 + 1 , 2))),
-        (lambda x: np.sinh(np.cbrt(x)) + np.cosh(4 * x ** 3) , lambda x: np.cosh(np.cbrt(x)) / (3 * x ** (2/3)) + 12 * (x ** 2) * np.sinh(4 * x ** 3)),
-        (lambda x: np.log(1 + x ** 2) / np.arctanh(x), lambda x: ((2 * x * np.arctanh(x) / (1 + x ** 2)) - (np.log(1 + x ** 2)/(1 - x ** 2))) / np.power(np.arctanh(x) , 2))
+        (lambda x: (2 * x + 1) ** 3, lambda x: 6 * (2 * x + 1) ** 2, (0.5, None)),
+        (lambda x: np.sin(x ** 2) / (np.sin(x)) ** 2, lambda x: (2 * x * np.cos(x ** 2) * np.sin(x) - 2 * np.sin(x ** 2) * np.cos(x)) / (np.sin(x)) ** 3, (0, pi)),
+        (lambda x: (np.log(x ** 2)) ** (1 / 3), lambda x: 2 * (np.log(x ** 2)) ** (-2/3) / (3 * x), (1, None)),
+        (lambda x: np.log((1 + x) / (1 - x)) / 4 - np.arctan(x) / 2, lambda x: x ** 2 / (1 - x ** 4), (-1, 1)),
+        (lambda x: np.arctanh(3 * x ** 3 + x ** 2 + 1), lambda x: (9 * x ** 2 + 2 * x) / (1 - (3 * x ** 3 + x ** 2 + 1) ** 2), (0, None)),
+        (lambda x: np.sinh(np.cbrt(x)) + np.cosh(4 * x ** 3) , lambda x: np.cosh(np.cbrt(x)) / (3 * x ** (2/3)) + 12 * (x ** 2) * np.sinh(4 * x ** 3), (1/4, None)),
+        (lambda x: np.log(1 + x ** 2) / np.arctanh(x), lambda x: ((2 * x * np.arctanh(x) / (1 + x ** 2)) - (np.log(1 + x ** 2) / (1 - x ** 2))) / (np.arctanh(x)) ** 2, (0, 1))
     ],
 )
-def test_arbitrary_function(backend, func, y_d):
-    x_arr = [0.2, 0.3]
+def test_arbitrary_function(backend, func, y_d, domain):
+    if domain is None:
+        x_arr = generate_test_data()
+    else:
+        x_arr = generate_test_data(a=domain[0], b=domain[1])
     try:
         with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
             x = np.asarray(x_arr)
