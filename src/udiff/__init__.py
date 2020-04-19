@@ -1,3 +1,42 @@
+"""
+Quick Start
+-----------
+
+Getting started is easy:
+
+.. note::
+    :obj:`udiff` has not been published on PyPI. You have to install it from source code now.
+
+#.  Use Git to clone the :obj:`udiff` repository:
+
+    .. code:: bash
+
+        git clone https://github.com/Quansight-Labs/udiff.git
+        cd udiff
+
+#.  Install :obj:`udiff` on the command line, enter:
+
+    .. code:: bash
+
+        python setup.py install --user
+
+#.  Use :obj:`udiff` in your code. A simple example:
+
+>>> import uarray as ua
+>>> import unumpy as np
+>>> import udiff
+>>> from unumpy import numpy_backend
+>>> from numpy import allclose
+>>> with ua.set_backend(numpy_backend), ua.set_backend(udiff, coerce=True):
+...    x = np.reshape(np.arange(25), (5, 5))
+...    x.var = udiff.Variable('x')
+...    y = np.exp(2 * x)
+...    y_d = 2 * y
+...    print(allclose(y.diffs[x].arr, y_d.arr))
+True
+
+"""
+
 import sys
 import uarray as ua
 

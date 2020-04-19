@@ -1,0 +1,4 @@
+udiff
+======
+
+.. automodule:: udiff

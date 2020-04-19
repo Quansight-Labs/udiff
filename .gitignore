@@ -66,6 +66,9 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+_static
+make.bat
+Makefile
 
 # PyBuilder
 target/
