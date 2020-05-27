@@ -1,0 +1,83 @@
+jobs:
+- job: Tests
+  pool:
+    vmImage: 'ubuntu-16.04'
+
+  steps:
+  - script: |
+      echo "##vso[task.prependpath]$CONDA/bin"
+      conda env create -f .conda/environment.yml
+    displayName: Prepare conda
+  - script: |
+      source activate uarray
+      pip install git+https://github.com/Quansight-Labs/uarray.git
+      pip install git+https://github.com/Quansight-Labs/unumpy.git
+      pip install -e . --no-deps
+    displayName: Install package
+  - script: |
+      source activate uarray
+      pytest
+    displayName: Run tests
+  - task: PublishCodeCoverageResults@1
+    inputs:
+      codeCoverageTool: Cobertura
+      summaryFileLocation: "$(System.DefaultWorkingDirectory)/**/coverage.xml"
+
+- job: TestsMinimalEnv
+  pool:
+    vmImage: 'ubuntu-16.04'
+
+  steps:
+  - script: |
+      echo "##vso[task.prependpath]$CONDA/bin"
+      conda env create -f .conda/environment_minimal.yml
+    displayName: Prepare conda
+  - script: |
+      source activate uarray_min
+      pip install git+https://github.com/Quansight-Labs/uarray.git
+      pip install git+https://github.com/Quansight-Labs/unumpy.git
+      pip install -e . --no-deps
+    displayName: Install package
+  - script: |
+      source activate uarray_min
+      pytest
+    displayName: Run tests
+  - task: PublishCodeCoverageResults@1
+    inputs:
+      codeCoverageTool: Cobertura
+      summaryFileLocation: "$(System.DefaultWorkingDirectory)/**/coverage.xml"
+
+- job: Docs
+  pool:
+    vmImage: 'ubuntu-16.04'
+  steps:
+  - script: |
+      echo "##vso[task.prependpath]$CONDA/bin"
+      conda env create -f .conda/environment.yml
+    displayName: Prepare conda
+  - script: |
+      source activate uarray
+      pip install git+https://github.com/Quansight-Labs/uarray.git
+      pip install git+https://github.com/Quansight-Labs/unumpy.git
+      pip install -e . --no-deps
+    displayName: Install package
+  - script: |
+      source activate uarray
+      sphinx-build -W -b html docs/ _build/html
+    displayName: Build docs
+  - script: |
+      source activate uarray
+      doc8
+    displayName: Lint docs
+  - task: PublishPipelineArtifact@0
+    inputs:
+      artifactName: 'Documentation'
+      targetPath: '$(System.DefaultWorkingDirectory)/_build/html'
+
+trigger:
+  branches:
+    include:
+    - master
+
+pr:
+- master

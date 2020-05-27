@@ -7,18 +7,10 @@ setuptools.setup(
     author_email="hameerabbasi@yahoo.com",
     description="Automatic differentiation with uarray/unumpy.",
     platforms="Posix; MacOS X; Windows",
-    packages=setuptools.find_packages(
-        where="src",
-        exclude=["tests*"]
-    ),
-    package_dir={
-        "": "src"
-    },
+    packages=setuptools.find_packages(where="src", exclude=["tests*"]),
+    package_dir={"": "src"},
     include_package_data=True,
-    install_requires=(
-        "uarray >= 0.6.0",
-        "unumpy >= 0.6.0"
-    ),
+    install_requires=("uarray >= 0.6.0", "unumpy >= 0.6.0"),
     classifiers=[
         "Development Status :: 1 - Alpha",
         "Natural Language :: English",
@@ -30,8 +22,6 @@ setuptools.setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
     ],
-    project_urls={
-        "Source": "https://github.com/Quansight-Labs/udiff",
-    },
+    project_urls={"Source": "https://github.com/Quansight-Labs/udiff",},
     zip_safe=False,
 )

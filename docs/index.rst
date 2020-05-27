@@ -13,7 +13,9 @@ What's new in ``udiff``?
 -------------------------
 
 :obj:`udiff` is committed to providing a universal differentiation mechanism built on a
-generic backend system. It's possible to get the differential of various calculations of different data types(scalar, tensor and matrix). In addition, it's possible to change the used backend via a context manager.
+generic backend system. It's possible to get the differential of various
+calculations of different data types(scalar, tensor and matrix). In addition, it's
+possible to change the used backend via a context manager.
 
 .. toctree::
     :hidden:

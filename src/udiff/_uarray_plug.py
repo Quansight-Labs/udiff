@@ -137,4 +137,5 @@ class NoRecurseBackend:
 
     def __eq__(self, other):
         import udiff
+
         return isinstance(other, NoRecurseBackend) or other is udiff
