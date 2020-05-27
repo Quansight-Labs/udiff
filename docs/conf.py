@@ -12,25 +12,26 @@
 #
 import os
 import sys
-# sys.path.insert(0, os.path.abspath('.'))
+
+# sys.path.insert(0, os.path.abspath("."))
 from typing import List, Dict
 
 sys.path.insert(0, os.path.abspath("../src"))
 
 # -- Project information -----------------------------------------------------
 
-project = 'udiff'
-copyright = '2020, Quansight-Labs'
-author = 'Quansight-Labs'
+project = "udiff"
+copyright = "2020, Quansight-Labs"
+author = "Quansight-Labs"
 
 # The full version, including alpha/beta/rc tags
-release = '0.6.0-alpha'
+release = "0.6.0-alpha"
 
 
 # -- General configuration ---------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings. They can be
-# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
+# extensions coming with Sphinx (named "sphinx.ext.*") or your custom
 # ones.
 extensions: List[str] = [
     "sphinx.ext.autodoc",
@@ -42,12 +43,12 @@ extensions: List[str] = [
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
-# source_suffix = ['.rst', '.md']
+# source_suffix = [".rst", ".md"]
 source_suffix = ".rst"
 
 # The master toctree document.
@@ -73,7 +74,7 @@ pygments_style = None
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 html_logo = "logo.png"
 html_favicon = "logo.png"
 
@@ -91,18 +92,18 @@ htmlhelp_basename = "udiffdoc"
 # -- Options for LaTeX output ------------------------------------------------
 
 latex_elements: Dict[str, str] = {
-    # The paper size ('letterpaper' or 'a4paper').
+    # The paper size ("letterpaper" or "a4paper").
     #
-    # 'papersize': 'letterpaper',
-    # The font size ('10pt', '11pt' or '12pt').
+    # "papersize": "letterpaper",
+    # The font size ("10pt", "11pt" or "12pt").
     #
-    # 'pointsize': '10pt',
+    # "pointsize": "10pt",
     # Additional stuff for the LaTeX preamble.
     #
-    # 'preamble': '',
+    # "preamble": "",
     # Latex figure (float) alignment
     #
-    # 'figure_align': 'htbp',
+    # "figure_align": "htbp",
 }
 
 # Grouping the document tree into LaTeX files. List of tuples
@@ -146,11 +147,11 @@ epub_title = project
 # The unique identifier of the text. This can be a ISBN number
 # or the project homepage.
 #
-# epub_identifier = ''
+# epub_identifier = ""
 
 # A unique identification for the text.
 #
-# epub_uid = ''
+# epub_uid = ""
 
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ["search.html"]
@@ -163,7 +164,7 @@ intersphinx_mapping = {
     "numpy": ("https://docs.scipy.org/doc/numpy/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/reference/", None),
     "uarray": ("https://uarray.org/en/latest/", None),
-    "unumpy": ("https://unumpy.uarray.org/en/latest/", None)
+    "unumpy": ("https://unumpy.uarray.org/en/latest/", None),
 }
 
 doctest_global_setup = """

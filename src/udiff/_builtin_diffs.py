@@ -29,7 +29,10 @@ def arctan2_diff(x1, x2):
     return (x1[1] * x2[0] - x1[0] * x2[1]) / (np.square(x1[0]) + np.square(x2[0]))
 
 
-register_diff(np.sign, lambda x: np.broadcast_to(np.where(x[0].arr == 0, float('nan'), 0), x[1].shape))
+register_diff(
+    np.sign,
+    lambda x: np.broadcast_to(np.where(x[0].arr == 0, float("nan"), 0), x[1].shape),
+)
 register_diff(np.add, lambda x1, x2: x1[1] + x2[1])
 register_diff(np.subtract, lambda x1, x2: x1[1] - x2[1])
 register_diff(np.multiply, multiply_diff)
@@ -37,7 +40,10 @@ register_diff(np.matmul, matmul_diff)
 register_diff(np.divide, divide_diff)
 register_diff(np.true_divide, divide_diff)
 register_diff(np.power, pow_diff)
-register_diff(np.absolute, lambda x: x[1] * np.where(np.sign(x[0]) == 0, float('nan'), np.sign(x[0])))
+register_diff(
+    np.absolute,
+    lambda x: x[1] * np.where(np.sign(x[0]) == 0, float("nan"), np.sign(x[0])),
+)
 register_diff(np.positive, lambda x: +x[1])
 register_diff(np.negative, lambda x: -x[1])
 register_diff(np.conj, lambda x: np.conj(x[1]))
