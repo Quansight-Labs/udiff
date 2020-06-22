@@ -13,6 +13,7 @@ import unumpy.torch_backend as TorchBackend
 import unumpy.dask_backend as DaskBackend
 import unumpy.sparse_backend as SparseBackend
 
+import numpy as onp
 from numpy.testing import *
 
 import pytest
@@ -116,9 +117,8 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         assert_almost_equal(rel_error, 0, decimal=5)
 
 
-@pytest.mark.xfail
 @pytest.mark.parametrize(
-    "method, y_d, domain",
+    "func, y_d, domain",
     [
         (np.positive, lambda x: 1, None),
         (np.negative, lambda x: -1, None),
@@ -129,11 +129,6 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         (np.log10, lambda x: 1 / (x * log(10)), (0, None)),
         (np.sqrt, lambda x: 0.5 * pow(x, -0.5), (0, None)),
         (np.square, lambda x: 2 * x, None),
-        (
-            np.cbrt,
-            lambda x: 1 / 3 * pow(x, -2 / 3),
-            (0, None),
-        ),  # Negative numbers cannot be raised to a fractional power
         (np.reciprocal, lambda x: -1 / pow(x, 2), (None, 0)),
         (np.sin, lambda x: cos(x), None),
         (np.cos, lambda x: -sin(x), None),
@@ -153,7 +148,7 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         (np.arctanh, lambda x: 1 / (1 - x ** 2), (-1, 1)),
     ],
 )
-def test_unary_function(backend, method, y_d, domain):
+def test_unary_function(backend, func, y_d, domain):
     if domain is None:
         x_arr = generate_test_data()
     else:
@@ -162,8 +157,8 @@ def test_unary_function(backend, method, y_d, domain):
     try:
         with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
             x = np.asarray(x_arr)
-            x.var = udiff.Variable("x")
-            ret = method(x)
+            ret = func(x)
+            ret.backward()
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
@@ -172,25 +167,25 @@ def test_unary_function(backend, method, y_d, domain):
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(ret.diffs[x].arr, y_d_arr)
+    assert_allclose(x.diff, y_d_arr)
 
 
-@pytest.mark.xfail
 @pytest.mark.parametrize(
     "func, y_d, domain",
     [
+        (lambda x: x * x, lambda x: 2 * x, None),
         (lambda x: (2 * x + 1) ** 3, lambda x: 6 * (2 * x + 1) ** 2, (0.5, None)),
         (
             lambda x: np.sin(x ** 2) / (np.sin(x)) ** 2,
             lambda x: (
-                2 * x * np.cos(x ** 2) * np.sin(x) - 2 * np.sin(x ** 2) * np.cos(x)
+                2 * x * onp.cos(x ** 2) * onp.sin(x) - 2 * onp.sin(x ** 2) * onp.cos(x)
             )
-            / (np.sin(x)) ** 3,
+            / (onp.sin(x)) ** 3,
             (0, pi),
         ),
         (
             lambda x: (np.log(x ** 2)) ** (1 / 3),
-            lambda x: 2 * (np.log(x ** 2)) ** (-2 / 3) / (3 * x),
+            lambda x: 2 * (onp.log(x ** 2)) ** (-2 / 3) / (3 * x),
             (1, None),
         ),
         (
@@ -199,23 +194,12 @@ def test_unary_function(backend, method, y_d, domain):
             (-1, 1),
         ),
         (
-            lambda x: np.arctanh(3 * x ** 3 + x ** 2 + 1),
-            lambda x: (9 * x ** 2 + 2 * x) / (1 - (3 * x ** 3 + x ** 2 + 1) ** 2),
-            (0, None),
-        ),
-        (
-            lambda x: np.sinh(np.cbrt(x)) + np.cosh(4 * x ** 3),
-            lambda x: np.cosh(np.cbrt(x)) / (3 * x ** (2 / 3))
-            + 12 * (x ** 2) * np.sinh(4 * x ** 3),
-            (1 / 4, 1),
-        ),  # Set bound to prevent numerical overflow
-        (
             lambda x: np.log(1 + x ** 2) / np.arctanh(x),
             lambda x: (
-                (2 * x * np.arctanh(x) / (1 + x ** 2))
-                - (np.log(1 + x ** 2) / (1 - x ** 2))
+                (2 * x * onp.arctanh(x) / (1 + x ** 2))
+                - (onp.log(1 + x ** 2) / (1 - x ** 2))
             )
-            / (np.arctanh(x)) ** 2,
+            / (onp.arctanh(x)) ** 2,
             (0, 1),
         ),
     ],
@@ -225,12 +209,12 @@ def test_arbitrary_function(backend, func, y_d, domain):
         x_arr = generate_test_data()
     else:
         x_arr = generate_test_data(a=domain[0], b=domain[1])
+    y_d_arr = [y_d(xa) for xa in x_arr]
     try:
         with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
             x = np.asarray(x_arr)
-            x.var = udiff.Variable("x")
             ret = func(x)
-            y_d_arr = y_d(x)
+            ret.backward()
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
@@ -239,7 +223,7 @@ def test_arbitrary_function(backend, func, y_d, domain):
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(ret.diffs[x].arr, y_d_arr.arr)
+    assert_allclose(x.diff, y_d_arr)
 
 
 @pytest.mark.xfail
@@ -270,8 +254,8 @@ def test_separation_unary(backend, u, diff_ndim, func, diff_u):
     try:
         with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
             u = np.asarray(u)
-            u.var = udiff.Variable("u", diff_ndim=diff_ndim)
             ret = func(u)
+            ret.backward()
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
@@ -280,7 +264,7 @@ def test_separation_unary(backend, u, diff_ndim, func, diff_u):
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(ret.diffs[u].arr, diff_u.tolist())
+    assert_allclose(u.diff, diff_u.tolist())
 
 
 @pytest.mark.xfail
@@ -304,11 +288,10 @@ def test_separation_binary(
     try:
         with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
             u = np.asarray(u)
-            u.var = udiff.Variable("u", diff_ndim=u_diff_ndim)
             v = np.asarray(v)
-            v.var = udiff.Variable("v", diff_ndim=v_diff_ndim)
 
             ret = func(u, v)
+            ret.backward()
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
@@ -317,5 +300,5 @@ def test_separation_binary(
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(ret.diffs[u].arr, diff_u.tolist())
-    assert_allclose(ret.diffs[v].arr, diff_v.tolist())
+    assert_allclose(u.diff, diff_u.tolist())
+    assert_allclose(v.diff, diff_v.tolist())

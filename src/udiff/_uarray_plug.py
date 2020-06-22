@@ -1,12 +1,12 @@
 from uarray import wrap_single_convertor
 from unumpy import ufunc, ndarray
 import unumpy
-import functools
+
 import unumpy as np
 import uarray as ua
-from . import _builtin_diffs
 
 from ._diff_array import DiffArray
+from ._vjp_diffs import nograd_functions
 
 from typing import Dict
 
@@ -22,61 +22,36 @@ _implementations: Dict = {
 }
 
 
-def __ua_function__(func, args, kwargs, tree=None):
+def __ua_function__(func, args, kwargs, requires_grad=True):
     from udiff import SKIP_SELF
-    from ._func_diff_registry import global_registry
 
     extracted_args = func.arg_extractor(*args, **kwargs)
     arr_args = tuple(x.value for x in extracted_args if x.type is np.ndarray)
-    input_args = tuple(
-        x.value for x in extracted_args if x.coercible and x.type is np.ndarray
-    )
-
-    if tree is None:
-        tree = compute_diff_tree(*input_args)
 
     with SKIP_SELF:
         if len(arr_args) == 0:
             out = func(*args, **kwargs)
-            return DiffArray(out)
+            # return DiffArray(out)
+        else:
+            a, kw = replace_arrays(
+                func,
+                args,
+                kwargs,
+                (
+                    x.value if x is not None and isinstance(x, DiffArray) else x
+                    for x in arr_args
+                ),
+            )
+            out = func(*a, **kw)
 
-        a, kw = replace_arrays(
-            func, args, kwargs, (x.arr if x is not None else None for x in arr_args)
-        )
-        out_arr = func(*a, **kw)
+    if requires_grad:
+        out = DiffArray(out)
 
-    out = DiffArray(out_arr)
-    for k in tree:
-        diff_args = []
-        for arr in arr_args:
-            if arr is None:
-                diff_args.append(None)
-                continue
-
-            if k in arr.diffs:
-                diff_args.append((arr, arr.diffs[k]))
-            else:
-                diff_args.append((arr, np.broadcast_to(0, arr.shape)))
-
-        a, kw = replace_arrays(func, args, kwargs, diff_args)
-
-        with ua.set_backend(NoRecurseBackend(tree[k])):
-            if func is np.ufunc.__call__:
-                diff_arr = global_registry[a[0]](*a[1:], **kw)
-            else:
-                diff_arr = global_registry[func](*a, **kw)
-            out.diffs[k] = diff_arr
+        if func not in nograd_functions:
+            with ua.set_backend(NoGradBackend()):
+                out.register_vjp(func, args, kwargs)
 
     return out
-
-
-def compute_diff_tree(*arrs, diffs=None):
-    if diffs is None:
-        diffs = {}
-    for arr in arrs:
-        for var, diff in arr.diffs.items():
-            diffs[var] = compute_diff_tree(diff, diffs=diffs.get(var, {}))
-    return diffs
 
 
 def replace_arrays(func, a, kw, arrays):
@@ -114,28 +89,15 @@ def __ua_convert__(value, dispatch_type, coerce):
     return value
 
 
-def replace_self(func):
-    @functools.wraps(func)
-    def inner(self, *args, **kwargs):
-        if self not in _ufunc_mapping:
-            return NotImplemented
-
-        return func(_ufunc_mapping[self], *args, **kwargs)
-
-    return inner
-
-
-class NoRecurseBackend:
-    def __init__(self, tree=None):
-        self._tree = tree
-
+class NoGradBackend:
     __ua_domain__ = __ua_domain__
     __ua_convert__ = staticmethod(__ua_convert__)
 
     def __ua_function__(self, f, a, kw):
-        return __ua_function__(f, a, kw, tree=self._tree)
+
+        return __ua_function__(f, a, kw, False)
 
     def __eq__(self, other):
         import udiff
 
-        return isinstance(other, NoRecurseBackend) or other is udiff
+        return isinstance(other, NoGradBackend) or other is udiff

@@ -27,12 +27,13 @@ Getting started is easy:
 >>> import udiff
 >>> from unumpy import numpy_backend
 >>> from numpy import allclose
+>>> import numpy as onp
 >>> with ua.set_backend(numpy_backend), ua.set_backend(udiff, coerce=True):
-...    x = np.reshape(np.arange(25), (5, 5))
-...    x.var = udiff.Variable('x')
-...    y = np.exp(2 * x)
-...    y_d = 2 * y
-...    print(allclose(y.diffs[x].arr, y_d.arr))
+...    x1 = np.array([2])
+...    x2 = np.array([5])
+...    y = np.log(x1) + x1 * x2 - np.sin(x2)
+...    y.backward()
+...    print(allclose(x1.diff, [5.5]))
 True
 
 """
@@ -40,25 +41,19 @@ True
 import sys
 import uarray as ua
 
+from . import _vjp_diffs
+from ._uarray_plug import __ua_domain__, __ua_convert__, __ua_function__, NoGradBackend
+from ._vjp_core import defvjp
 
-from ._uarray_plug import __ua_domain__, __ua_convert__, __ua_function__
-from ._func_diff_registry import (
-    FunctionDifferentialRegistry,
-    register_diff,
-    diff,
-)
-from ._diff_array import Variable, DiffArray, ArrayDiffRegistry
+from ._diff_array import DiffArray
 
 __all__ = [
     "__ua_domain__",
     "__ua_convert__",
     "__ua_function__",
-    "FunctionDifferentialRegistry",
-    "register_diff",
-    "diff",
-    "Variable",
+    "defvjp",
     "DiffArray",
-    "ArrayDiffRegistry",
+    "NoGradBackend",
 ]
 
 SKIP_SELF = ua.skip_backend(sys.modules["udiff"])
