@@ -74,6 +74,8 @@ class DiffArray(np.ndarray):
                 parent_argnums.append(pn)
                 pn += 1
                 vjp_args.append(arg.value)
+            elif not isinstance(arg, np.ufunc):
+                vjp_args.append(arg)
 
         self._vjp = vjpmaker(tuple(parent_argnums), self.value, tuple(vjp_args), kwargs)
 
