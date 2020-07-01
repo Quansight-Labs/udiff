@@ -226,36 +226,39 @@ def test_arbitrary_function(backend, func, y_d, domain):
     assert_allclose(x.diff, y_d_arr)
 
 
-@pytest.mark.xfail
 @pytest.mark.parametrize(
-    "u, diff_ndim, func, diff_u",
+    "x, func, x_jacobian",
     [
         (
-            onp.arange(24).reshape(2, 3, 4, 1),
-            2,
-            lambda x: x,
-            onp.tile(onp.eye(4), (2, 3, 1)).reshape(2, 3, 4, 1, 4, 1),
-        ),
-        (
             onp.arange(12).reshape(2, 3, 2),
-            2,
             lambda x: np.sum(x, axis=1),
-            onp.tile([[1, 0], [0, 1]], (2, 3)).reshape(2, 1, 2, 3, 2),
+            [
+                [
+                    [[[1, 0], [1, 0], [1, 0]], [[0, 0], [0, 0], [0, 0]]],
+                    [[[0, 1], [0, 1], [0, 1]], [[0, 0], [0, 0], [0, 0]]],
+                ],
+                [
+                    [[[0, 0], [0, 0], [0, 0]], [[1, 0], [1, 0], [1, 0]]],
+                    [[[0, 0], [0, 0], [0, 0]], [[0, 1], [0, 1], [0, 1]]],
+                ],
+            ],
         ),
         (
-            onp.arange(12).reshape((2, 3, 2)),
-            2,
+            onp.arange(4).reshape((2, 2)),
             lambda x: x,
-            onp.stack([onp.eye(6).reshape(3, 2, 3, 2), onp.eye(6).reshape(3, 2, 3, 2)]),
+            [
+                [[[1, 0], [0, 0]], [[0, 1], [0, 0]]],
+                [[[0, 0], [1, 0]], [[0, 0], [0, 1]]],
+            ],
         ),
     ],
 )
-def test_separation_unary(backend, u, diff_ndim, func, diff_u):
+def test_separation_unary(backend, x, func, x_jacobian):
     try:
         with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
-            u = np.asarray(u)
-            ret = func(u)
-            ret.backward()
+            x = np.asarray(x)
+            ret = func(x)
+            ret.backward_jacobian()
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
@@ -264,34 +267,29 @@ def test_separation_unary(backend, u, diff_ndim, func, diff_u):
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(u.diff, diff_u.tolist())
+    assert_allclose(x.jacobian, x_jacobian)
 
 
-@pytest.mark.xfail
 @pytest.mark.parametrize(
-    "u, v, u_diff_ndim, v_diff_ndim, func, diff_u, diff_v",
+    "u, v, func, u_jacobian, v_jacobian",
     [
         (
             onp.arange(2).reshape(1, 2, 1),
             onp.arange(2).reshape(1, 1, 2),
-            2,
-            2,
             lambda x, y: np.matmul(x, y),
-            onp.array([[0, 0, 1, 0], [0, 0, 0, 1]]).reshape(1, 2, 2, 2, 1),
-            onp.array([[0, 0, 0, 0], [1, 0, 0, 1]]).reshape(1, 2, 2, 1, 2),
+            [[[[[[0], [0]]], [[[1], [0]]]], [[[[0], [0]]], [[[0], [1]]]]]],
+            [[[[[[0, 0]]], [[[0, 0]]]], [[[[1, 0]]], [[[0, 1]]]]]],
         )
     ],
 )
-def test_separation_binary(
-    backend, u, v, u_diff_ndim, v_diff_ndim, func, diff_u, diff_v
-):
+def test_separation_binary(backend, u, v, func, u_jacobian, v_jacobian):
     try:
         with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
             u = np.asarray(u)
             v = np.asarray(v)
 
             ret = func(u, v)
-            ret.backward()
+            ret.backward_jacobian()
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
@@ -300,5 +298,5 @@ def test_separation_binary(
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(u.diff, diff_u.tolist())
-    assert_allclose(v.diff, diff_v.tolist())
+    assert_allclose(u.jacobian, u_jacobian)
+    assert_allclose(v.jacobian, v_jacobian)
