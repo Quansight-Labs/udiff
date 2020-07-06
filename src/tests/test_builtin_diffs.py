@@ -127,6 +127,7 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         (np.log, lambda x: 1 / x, (0, None)),
         (np.log2, lambda x: 1 / (x * log(2)), (0, None)),
         (np.log10, lambda x: 1 / (x * log(10)), (0, None)),
+        (np.log1p, lambda x: 1 / (x + 1), (-1, None)),
         (np.sqrt, lambda x: 0.5 * pow(x, -0.5), (0, None)),
         (np.square, lambda x: 2 * x, None),
         (np.reciprocal, lambda x: -1 / pow(x, 2), (None, 0)),
@@ -146,6 +147,12 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         (np.arcsinh, lambda x: 1 / sqrt(1 + x ** 2), None),
         (np.arccosh, lambda x: 1 / sqrt(-1 + x ** 2), (1, None)),
         (np.arctanh, lambda x: 1 / (1 - x ** 2), (-1, 1)),
+        (np.absolute, lambda x: 1 if x > 0 else -1, None),
+        (np.fabs, lambda x: 1 if x > 0 else -1, None),
+        (np.reciprocal, lambda x: -1 / x ** 2, (1, 10)),
+        (np.expm1, lambda x: exp(x), None),
+        # (np.rad2deg, lambda x: 1 / pi * 180.0, None),
+        # (np.deg2rad, lambda x: pi / 180.0, None),
     ],
 )
 def test_unary_function(backend, func, y_d, domain):

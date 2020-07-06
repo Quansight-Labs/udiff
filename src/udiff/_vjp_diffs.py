@@ -1,5 +1,6 @@
 from ._vjp_core import defvjp
 import unumpy as np
+from functools import partial
 
 # ----- Non-differentiable functions -----
 
@@ -39,8 +40,26 @@ nograd_functions = set(
         np.equal,
         np.not_equal,
         np.size,
-        # np.array_equiv, np.greater, np.greater_equal, np.less, np.less_equal,
-        # np.round, np.around, np.fix, np.isneginf, np.isposinf, np.allclose, np.isclose, np.array_equal, np.iscomplexobj, np.iscomplex, np.isscalar, np.isreal, np.zeros_like, np.ones_like, np.result_type,
+        # np.array_equiv,
+        np.greater,
+        np.greater_equal,
+        np.less,
+        np.less_equal,
+        # np.round,
+        # np.around,
+        # np.fix,
+        # np.isneginf,
+        # np.isposinf,
+        # np.allclose,
+        # np.isclose,
+        # np.array_equal,
+        # np.iscomplexobj,
+        # np.iscomplex,
+        # np.isscalar,
+        # np.isreal,
+        # np.zeros_like,
+        # np.ones_like,
+        # np.result_type,
     ]
 )
 
@@ -180,15 +199,17 @@ defvjp(
 # defvjp(np.vsplit,      lambda ans, ary, idxs         : lambda g: np.concatenate(g, axis=0))
 # defvjp(np.hsplit,      lambda ans, ary, idxs         : lambda g: np.concatenate(g, axis=1))
 # defvjp(np.dsplit,      lambda ans, ary, idxs         : lambda g: np.concatenate(g, axis=2))
-# defvjp(np.ravel,   lambda ans, x, order=None   : lambda g: np.reshape(g, np.shape(x), order=order))
+defvjp(
+    np.ravel,
+    lambda ans, x, order=None: lambda g: np.reshape(g, np.shape(x), order=order),
+)
 # defvjp(np.expand_dims, lambda ans, x, axis     : lambda g: np.reshape(g, np.shape(x)))
 # defvjp(np.squeeze, lambda ans, x, axis=None    : lambda g: np.reshape(g, np.shape(x)))
 # defvjp(np.diag,    lambda ans, x, k=0          : lambda g: np.diag(g, k))
 # defvjp(np.flipud,  lambda ans, x,              : lambda g: np.flipud(g))
 # defvjp(np.fliplr,  lambda ans, x,              : lambda g: np.fliplr(g))
 # defvjp(np.rot90,   lambda ans, x, k=1          : lambda g: np.rot90(g, -k))
-# defvjp(np.trace,   lambda ans, x, offset=0     : lambda g:
-# np.einsum('ij,...->ij...', np.eye(x.shape[0], x.shape[1], k=offset), g))
+# defvjp(np.trace,   lambda ans, x, offset=0     : lambda g: np.einsum('ij,...->ij...', np.eye(x.shape[0], x.shape[1], k=offset), g))
 defvjp(
     np.full,
     lambda ans, shape, fill_value, dtype=None: lambda g: np.sum(g),
@@ -197,13 +218,15 @@ defvjp(
 # defvjp(np.triu,    lambda ans, x, k=0          : lambda g: np.triu(g, k=k))
 # defvjp(np.tril,    lambda ans, x, k=0          : lambda g: np.tril(g, k=k))
 # defvjp(np.clip,    lambda ans, x, a_min, a_max : lambda g: g * np.logical_and(ans != a_min, ans != a_max))
-# defvjp(np.swapaxes, lambda ans, x, axis1, axis2: lambda g: np.swapaxes(g, axis2, axis1))
-# defvjp(np.moveaxis, lambda ans, a, source, destination: lambda g:
-#                     np.moveaxis(g, destination, source))
+defvjp(np.swapaxes, lambda ans, x, axis1, axis2: lambda g: np.swapaxes(g, axis2, axis1))
+defvjp(
+    np.moveaxis,
+    lambda ans, a, source, destination: lambda g: np.moveaxis(g, destination, source),
+)
 # defvjp(np.real_if_close, lambda ans, x : lambda g: match_complex(x, g))
 # defvjp(np.real,   lambda ans, x   : lambda g: match_complex(x, g))
 # defvjp(np.imag,   lambda ans, x   : lambda g: match_complex(x, -1j * g))
-# defvjp(np.conj,   lambda ans, x   : lambda g: np.conj(g))
+defvjp(np.conj, lambda ans, x: lambda g: np.conj(g))
 # defvjp(np.conjugate, lambda ans, x: lambda g: np.conj(g))
 # defvjp(np.angle,  lambda ans, x   : lambda g: match_complex(x, g * np.conj(x * 1j) / np.abs(x)**2))
 defvjp(
@@ -774,15 +797,16 @@ defvjp(np.partition, grad_partition)
 #     lambda ans, D, offset=0, axis1=0, axis2=1 :
 #     lambda g: np.diagonal(g, offset, axis1, axis2))
 
-# def match_complex(target, x):
-#     target_iscomplex = np.iscomplexobj(target)
-#     x_iscomplex      = np.iscomplexobj(x)
-#     if x_iscomplex and not target_iscomplex:
-#         return np.real(x)
-#     elif not x_iscomplex and target_iscomplex:
-#         return x + 0j
-#     else:
-#         return x
+
+def match_complex(target, x):
+    target_iscomplex = np.iscomplexobj(target)
+    x_iscomplex = np.iscomplexobj(x)
+    if x_iscomplex and not target_iscomplex:
+        return np.real(x)
+    elif not x_iscomplex and target_iscomplex:
+        return x + 0j
+    else:
+        return x
 
 
 def metadata(A):
