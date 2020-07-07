@@ -29,6 +29,7 @@ nograd_functions = set(
         np.sign,
         np.ndim,
         np.shape,
+        np.dtype,
         np.floor_divide,
         np.logical_and,
         np.logical_or,
@@ -232,8 +233,10 @@ defvjp(np.conj, lambda ans, x: lambda g: np.conj(g))
 defvjp(
     np.where,
     None,
-    lambda ans, c, x=None, y=None: lambda g: np.where(c, g, np.zeros(g.shape)),
-    lambda ans, c, x=None, y=None: lambda g: np.where(c, np.zeros(g.shape), g),
+    # lambda ans, c, x=None, y=None: lambda g: np.where(c, g, np.zeros_like(g)),
+    lambda ans, c, x=None, y=None: lambda g: np.where(c, g, np.zeros(np.shape(g))),
+    # lambda ans, c, x=None, y=None: lambda g: np.where(c, np.zeros_like(g), g),
+    lambda ans, c, x=None, y=None: lambda g: np.where(c, np.zeros(np.shape(g)), g),
 )
 # defvjp(np.cross, lambda ans, a, b, axisa=-1, axisb=-1, axisc=-1, axis=None : lambda g:
 #                   np.cross(b, g, axisb, axisc, axisa, axis),
@@ -420,7 +423,7 @@ defvjp(np.broadcast_to, grad_broadcast_to)
 
 
 def grad_np_sum(ans, x, axis=None, keepdims=False, dtype=None):
-    shape, dtype = x.shape, x.dtype
+    shape, dtype = np.shape(x), x.dtype
     return lambda g: repeat_to_match_shape(g, shape, dtype, axis, keepdims)[0]
 
 
@@ -710,7 +713,7 @@ defvjp(np.matmul, matmul_vjp_0, matmul_vjp_1)
 
 def grad_sort(ans, x, axis=-1, kind="quicksort", order=None):
     # TODO: Cast input with np.asanyarray()
-    if len(x.shape) > 1:
+    if len(np.shape(x)) > 1:
         raise NotImplementedError(
             "Gradient of sort not implemented for multi-dimensional arrays."
         )
@@ -724,7 +727,7 @@ defvjp(np.msort, grad_sort)  # Until multi-D is allowed, these are the same.
 
 def grad_partition(ans, x, kth, axis=-1, kind="introselect", order=None):
     # TODO: Cast input with np.asanyarray()
-    if len(x.shape) > 1:
+    if len(np.shape(x)) > 1:
         raise NotImplementedError(
             "Gradient of partition not implemented for multi-dimensional arrays."
         )
@@ -810,12 +813,14 @@ def match_complex(target, x):
 
 
 def metadata(A):
-    return A.shape, A.ndim, A.dtype
+    # return A.shape, A.ndim, A.dtype
+    return np.shape(A), np.ndim(A), A.dtype
 
 
 def unbroadcast(x, target_meta, broadcast_idx=0):
     target_shape, target_ndim, dtype = target_meta
-    while x.ndim > target_ndim:
+    # while x.ndim > target_ndim:
+    while np.ndim(x) > target_ndim:
         x = np.sum(x, axis=broadcast_idx)
     for axis, size in enumerate(target_shape):
         if size == 1:

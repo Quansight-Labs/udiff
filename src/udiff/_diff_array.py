@@ -13,8 +13,8 @@ class DiffArray(np.ndarray):
         if isinstance(arr, DiffArray):
             self._value = arr.value
             self._name = arr.name
-            self._parents = arr.parents
-            self._vjp = arr.vjp
+            self._parents = arr._parents
+            self._vjp = arr._vjp
             self._diff = arr._diff
             self._jacobian = arr._jacobian
             self._visit = arr._visit
@@ -35,14 +35,6 @@ class DiffArray(np.ndarray):
         self._visit_jacobian = None
 
         DiffArray.count += 1
-
-    @property
-    def shape(self):
-        return self._value.shape
-
-    @property
-    def ndim(self):
-        return self._value.ndim
 
     @property
     def dtype(self):
@@ -104,15 +96,17 @@ class DiffArray(np.ndarray):
         Traverse computation graph backwards in topological order from the end node.
         For each node, compute local gradient contribution and accumulate.
         """
-        from ._uarray_plug import NoGradBackend
+        from udiff import SKIP_SELF
 
-        with ua.set_backend(NoGradBackend()):
+        with SKIP_SELF:
             if grad_variables is None:
-                grad_variables = np.ones(self.value.shape)
+                # grad_variables = np.ones_like(self.value)
+                grad_variables = np.ones(np.shape(self.value))
             if end_node is None:
                 end_node = self.name
             if self._diff is None or self._visit != end_node:
-                self._diff = np.zeros(self.value.shape)
+                # self._diff = np.zeros_like(self.value)
+                self._diff = np.zeros(np.shape(self.value))
             self._diff += grad_variables
             self._visit = end_node
             if self._vjp:
@@ -122,7 +116,7 @@ class DiffArray(np.ndarray):
 
     def _backward_jacobian(self, grad_variables, end_node, position):
         if self._visit_jacobian != end_node:
-            jacobian_shape = end_node[1] + self.shape
+            jacobian_shape = end_node[1] + np.shape(self.value)
             self._jacobian = np.zeros(jacobian_shape)
             self._visit_jacobian = end_node
         self._jacobian[position] += grad_variables
@@ -139,14 +133,16 @@ class DiffArray(np.ndarray):
         (out1, out2, ...) then the Jacobian has shape (out1, out2, ..., in1,
         in2, ...).
         """
-        from ._uarray_plug import NoGradBackend
+        from udiff import SKIP_SELF
 
-        with ua.set_backend(NoGradBackend()):
-            for position in itertools.product(*[range(i) for i in self.shape]):
-                grad_variables = np.zeros(self.shape, dtype=self.dtype)
+        with SKIP_SELF:
+            for position in itertools.product(
+                *[range(i) for i in np.shape(self.value)]
+            ):
+                grad_variables = np.zeros(np.shape(self.value), dtype=self.dtype)
                 grad_variables[position] = 1
                 self._backward_jacobian(
-                    grad_variables, (self.name, self.shape), position
+                    grad_variables, (self.name, np.shape(self.value)), position
                 )
 
     __repr__ = __str__

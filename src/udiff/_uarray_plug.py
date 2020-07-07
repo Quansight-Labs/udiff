@@ -31,7 +31,6 @@ def __ua_function__(func, args, kwargs, requires_grad=True):
     with SKIP_SELF:
         if len(arr_args) == 0:
             out = func(*args, **kwargs)
-            # return DiffArray(out)
         else:
             a, kw = replace_arrays(
                 func,
@@ -48,7 +47,7 @@ def __ua_function__(func, args, kwargs, requires_grad=True):
         out = DiffArray(out)
 
         if func not in nograd_functions:
-            with ua.set_backend(NoGradBackend()):
+            with SKIP_SELF:
                 out.register_vjp(func, args, kwargs)
 
     return out
@@ -87,17 +86,3 @@ def __ua_convert__(value, dispatch_type, coerce):
         return NotImplemented
 
     return value
-
-
-class NoGradBackend:
-    __ua_domain__ = __ua_domain__
-    __ua_convert__ = staticmethod(__ua_convert__)
-
-    def __ua_function__(self, f, a, kw):
-
-        return __ua_function__(f, a, kw, False)
-
-    def __eq__(self, other):
-        import udiff
-
-        return isinstance(other, NoGradBackend) or other is udiff

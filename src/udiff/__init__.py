@@ -42,7 +42,7 @@ import sys
 import uarray as ua
 
 from . import _vjp_diffs
-from ._uarray_plug import __ua_domain__, __ua_convert__, __ua_function__, NoGradBackend
+from ._uarray_plug import __ua_domain__, __ua_convert__, __ua_function__
 from ._vjp_core import defvjp
 
 from ._diff_array import DiffArray
@@ -53,7 +53,6 @@ __all__ = [
     "__ua_function__",
     "defvjp",
     "DiffArray",
-    "NoGradBackend",
 ]
 
 SKIP_SELF = ua.skip_backend(sys.modules["udiff"])
