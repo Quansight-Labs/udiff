@@ -16,6 +16,8 @@ jobs:
     displayName: Install package
   - script: |
       source activate uarray
+      python setup.py build
+      python setup.py install
       pytest
     displayName: Run tests
   - task: PublishCodeCoverageResults@1
@@ -40,6 +42,8 @@ jobs:
     displayName: Install package
   - script: |
       source activate uarray_min
+      python setup.py build
+      python setup.py install
       pytest
     displayName: Run tests
   - task: PublishCodeCoverageResults@1

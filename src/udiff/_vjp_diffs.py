@@ -137,7 +137,7 @@ defvjp(
     np.power,
     lambda ans, x, y: unbroadcast_f(x, lambda g: g * y * x ** np.where(y, y - 1, 1.0)),
     lambda ans, x, y: unbroadcast_f(
-        y, lambda g: g * np.log(replace_zero(x, 1.0)) * ans
+        y, lambda g: g * np.log(replace_non_positive(x, 1.0)) * ans
     ),
 )
 defvjp(
@@ -852,6 +852,10 @@ def balanced_eq(x, z, y):
 
 def replace_zero(x, val):
     return np.where(x, x, val)
+
+
+def replace_non_positive(x, val):
+    return np.where(x > 0, x, val)
 
 
 # # ----- extra functions used internally  -----

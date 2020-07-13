@@ -22,6 +22,7 @@ possible to change the used backend via a context manager.
     :maxdepth: 3
 
     generated/udiff
+    auto_diff.rst
 
 Indices and tables
 ==================

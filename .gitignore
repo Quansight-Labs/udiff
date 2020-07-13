@@ -67,7 +67,6 @@ instance/
 # Sphinx documentation
 docs/_build/
 _build/
-_static
 make.bat
 Makefile
 
