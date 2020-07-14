@@ -400,12 +400,10 @@ def repeat_to_match_shape(g, shape, dtype, axis, keepdims):
         return g, 1
     axis = list(axis) if isinstance(axis, tuple) else axis
     new_shape = np.array(shape, dtype=int)
-    if axis:
-        new_shape[axis] = 1
+    new_shape[axis] = 1
     num_reps = np.prod(np.array(shape)[axis])
     # Can't use broadcast_to because of numpy bug: https://github.com/numpy/numpy/issues/9165
-    # return np.broadcast_to(np.reshape(g, new_shape), shape), num_reps
-    # return np.reshape(g, new_shape) + np.zeros(shape, dtype=dtype), num_reps
+    # return anp.broadcast_to(anp.reshape(g, new_shape), shape), num_reps
     return np.reshape(g, new_shape) + np.zeros(shape, dtype=dtype), num_reps
 
 
