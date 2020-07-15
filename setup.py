@@ -12,9 +12,9 @@ setuptools.setup(
     include_package_data=True,
     install_requires=("uarray >= 0.6.0", "unumpy >= 0.6.0"),
     classifiers=[
-        "Development Status :: 1 - Alpha",
+        "Development Status :: 3 - Alpha",
         "Natural Language :: English",
-        "Intended Audience :: Scientists and Mathematicians",
+        "Intended Audience :: Science/Research",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.5",
