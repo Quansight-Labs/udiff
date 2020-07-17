@@ -19,6 +19,8 @@ dependencies:
   - sparse
   - doc8
   - black
+  - matplotlib
   - pip:
     - pytest-mypy
     - pytest-black
+    - nbval

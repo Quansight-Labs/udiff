@@ -1,139 +1,149 @@
+import uarray as ua
+import unumpy as np
+import itertools
+from ._vjp_core import primitive_vjps
+
 import unumpy as np
 
 
 class DiffArray(np.ndarray):
-    def __init__(self, arr, diffs=None):
+    count = 0
+
+    def __init__(self, arr):
         if isinstance(arr, DiffArray):
-            self._diffs = arr.diffs
-            self._arr = arr.arr
-            self._var = arr.var
+            self._value = arr.value
+            self._name = arr.name
+            self._parents = arr._parents
+            self._vjp = arr._vjp
+            self._diff = arr._diff
+            self._jacobian = arr._jacobian
+            self._visit = arr._visit
+            self._visit_jacobian = arr._visit_jacobian
 
         from udiff import SKIP_SELF
 
         with SKIP_SELF:
             arr = np.asarray(arr)
 
-        if diffs is None:
-            diffs = ArrayDiffRegistry(arr.shape)
+        self._value = arr
+        self._name = "var_{}".format(DiffArray.count)
+        self._parents = []
+        self._vjp = None
+        self._diff = None
+        self._jacobian = None
+        self._visit = None
+        self._visit_jacobian = None
 
-        if not isinstance(diffs, ArrayDiffRegistry):
-            raise ValueError("diffs must be an ArrayDiffRegistry")
-
-        if diffs.shape != arr.shape:
-            raise ValueError("diffs didn't have the right shape")
-
-        self._diffs = diffs
-        self._arr = arr
-        self._var = None
+        DiffArray.count += 1
 
     @property
-    def shape(self):
-        return self._arr.shape
+    def dtype(self):
+        return self._value.dtype
 
     @property
-    def ndim(self):
-        return self._arr.ndim
-
-    @property
-    def diffs(self):
-        return self._diffs
-
-    @property
-    def arr(self):
-        return self._arr
-
-    @property
-    def var(self):
-        return self._var
-
-    @var.setter
-    def var(self, value):
-        if not isinstance(value, Variable):
-            raise ValueError("var must be a Variable")
-
-        if self._var is not None:
-            raise ValueError("variable already set")
-
-        self._var = value
-        self.diffs[value] = np.array(1)
-
-    def __getitem__(self, k):
-        arr = self._arr[k]
-        diffs = ArrayDiffRegistry(arr.shape)
-        for var, darr in self.diffs.items():
-            diffs[var] = darr[k]
-
-        return DiffArray(arr, diffs=diffs)
-
-    def __str__(self):
-        return "<{}, name={}, arr=\n{}\n>".format(
-            type(self).__name__,
-            repr(self.var.name) if self.var is not None else "unbound",
-            str(self.arr),
-        )
-
-    __repr__ = __str__
-    __hash__ = object.__hash__
-
-    def __setitem__(self, k, v):
-        if not isinstance(v, type(self)):
-            raise ValueError("v must be of the same type as self")
-
-        if not all(i in v._diffs.keys() for i in self._diffs.keys()):
-            raise ValueError("v doesn't have all required diffs")
-
-        self._arr[k] = v._arr
-
-        for i in self._diffs:
-            self._diffs[i][k] = v._diffs[i]
-
-
-class Variable:
-    def __init__(self, name):
-        if not isinstance(name, str):
-            raise ValueError("k must be a string")
-
-        self._name = str(name)
+    def value(self):
+        return self._value
 
     @property
     def name(self):
         return self._name
 
-    def __str__(self):
-        return "Variable({})".format(repr(self._name))
-
-    __repr__ = __str__
-
-
-class ArrayDiffRegistry(dict):
-    def __init__(self, shape):
-        super().__init__()
-        self._shape = shape
+    @property
+    def diff(self):
+        return self._diff
 
     @property
-    def shape(self):
-        return self._shape
+    def jacobian(self):
+        return self._jacobian
 
-    def __setitem__(self, k, v):
-        if isinstance(k, DiffArray):
-            if not k.var:
-                raise ValueError("k does not have a set var")
+    def register_vjp(self, func, args, kwargs):
+        try:
+            if func is np.ufunc.__call__:
+                vjpmaker = primitive_vjps[args[0]]
+            else:
+                vjpmaker = primitive_vjps[func]
+        except KeyError:
+            raise NotImplementedError("VJP of func not defined")
+        parent_argnums = []
+        vjp_args = []
+        pn = 0
+        for arg in args:
+            if isinstance(arg, DiffArray):
+                self._parents.append((pn, arg))
+                parent_argnums.append(pn)
+                pn += 1
+                vjp_args.append(arg.value)
+            elif not isinstance(arg, np.ufunc):
+                vjp_args.append(arg)
 
-            k = k.var
+        from udiff import SKIP_SELF
 
-        if not isinstance(k, Variable):
-            raise ValueError("k must be a Variable")
+        with SKIP_SELF:
+            self._vjp = vjpmaker(
+                tuple(parent_argnums), self.value, tuple(vjp_args), kwargs
+            )
 
-        if not isinstance(v, DiffArray):
-            v = DiffArray(v)
+    def __str__(self):
+        return "<{}, name={}, value=\n{}\n>".format(
+            type(self).__name__,
+            repr(self.name) if self.name is not None else "unbound",
+            str(self.value),
+        )
 
-        v = np.broadcast_to(v, self.shape)
-        super().__setitem__(k, v)
+    def backward(self, grad_variables=None, end_node=None):
+        """
+        Backpropagation.
+        Traverse computation graph backwards in topological order from the end node.
+        For each node, compute local gradient contribution and accumulate.
+        """
+        from udiff import SKIP_SELF
 
-    def __getitem__(self, k):
-        if isinstance(k, DiffArray):
-            if not k.var:
-                raise ValueError("k does not have a set var")
+        with SKIP_SELF:
+            if grad_variables is None:
+                # grad_variables = np.ones_like(self.value)
+                grad_variables = np.ones(np.shape(self.value))
+            if end_node is None:
+                end_node = self.name
+            if self._diff is None or self._visit != end_node:
+                # self._diff = np.zeros_like(self.value)
+                self._diff = np.zeros(np.shape(self.value))
+            self._diff += grad_variables
+            self._visit = end_node
+            if self._vjp:
+                diffs = list(self._vjp(grad_variables))
+                for pn, p in self._parents:
+                    p.backward(diffs[pn], self._visit)
 
-            k = k.var
-        return super().__getitem__(k)
+    def _backward_jacobian(self, grad_variables, end_node, position):
+        if self._visit_jacobian != end_node:
+            jacobian_shape = end_node[1] + np.shape(self.value)
+            self._jacobian = np.zeros(jacobian_shape)
+            self._visit_jacobian = end_node
+        self._jacobian[position] += grad_variables
+        if self._vjp:
+            diffs = list(self._vjp(grad_variables))
+            for pn, p in self._parents:
+                p._backward_jacobian(diffs[pn], end_node, position)
+
+    def backward_jacobian(self):
+        """Backpropagation.
+        Traverse computation graph backwards in topological order from the end node.
+        For each node, compute local Jacobian contribution and accumulate.
+        If the input to `fun` has shape (in1, in2, ...) and the output has shape
+        (out1, out2, ...) then the Jacobian has shape (out1, out2, ..., in1,
+        in2, ...).
+        """
+        from udiff import SKIP_SELF
+
+        with SKIP_SELF:
+            for position in itertools.product(
+                *[range(i) for i in np.shape(self.value)]
+            ):
+                grad_variables = np.zeros(np.shape(self.value), dtype=self.dtype)
+                grad_variables[position] = 1
+                self._backward_jacobian(
+                    grad_variables, (self.name, np.shape(self.value)), position
+                )
+
+    __repr__ = __str__
+    __hash__ = object.__hash__

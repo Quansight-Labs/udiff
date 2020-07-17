@@ -9,14 +9,13 @@ import udiff
 from unumpy import numpy_backend
 
 with ua.set_backend(numpy_backend), ua.set_backend(udiff, coerce=True):
-    x = np.reshape(np.arange(25), (5, 5))
-    x.var = udiff.Variable('x')
-    x.diffs[x].diffs[x] = 0
-
-    y = np.exp(2 * x)
+    x1 = np.reshape(np.arange(1, 26), (5, 5))
+    x2 = np.reshape(np.arange(1, 26), (5, 5))
+    y = np.log(x1) + x1 * x2 - np.sin(x2)
     print(y)
-    print(y.diffs[x])
-    print(y.diffs[x].diffs[x])
+    y.backward()
+    print(x1.diff)
+    print(x2.diff)
 ```
 
 ## Contributing
