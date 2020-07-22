@@ -162,7 +162,7 @@ def test_unary_function(backend, func, y_d, domain):
         x_arr = generate_test_data(a=domain[0], b=domain[1])
     y_d_arr = [y_d(xa) for xa in x_arr]
     try:
-        with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
+        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
             x = np.asarray(x_arr)
             ret = func(x)
             ret.backward()
@@ -218,7 +218,7 @@ def test_arbitrary_function(backend, func, y_d, domain):
         x_arr = generate_test_data(a=domain[0], b=domain[1])
     y_d_arr = [y_d(xa) for xa in x_arr]
     try:
-        with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
+        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
             x = np.asarray(x_arr)
             ret = func(x)
             ret.backward()
@@ -262,7 +262,7 @@ def test_arbitrary_function(backend, func, y_d, domain):
 )
 def test_separation_unary(backend, x, func, x_jacobian):
     try:
-        with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
+        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
             x = np.asarray(x)
             ret = func(x)
             ret.backward_jacobian()
@@ -291,7 +291,7 @@ def test_separation_unary(backend, x, func, x_jacobian):
 )
 def test_separation_binary(backend, u, v, func, u_jacobian, v_jacobian):
     try:
-        with ua.set_backend(backend), ua.set_backend(udiff, coerce=True):
+        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
             u = np.asarray(u)
             v = np.asarray(v)
 
