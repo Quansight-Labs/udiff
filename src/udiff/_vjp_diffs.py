@@ -58,8 +58,8 @@ nograd_functions = set(
         # np.iscomplex,
         # np.isscalar,
         # np.isreal,
-        # np.zeros_like,
-        # np.ones_like,
+        np.zeros_like,
+        np.ones_like,
         # np.result_type,
     ]
 )
@@ -152,7 +152,7 @@ defvjp(
 )
 
 # ----- Simple grads -----
-
+defvjp(np.sign, lambda ans, x: lambda g: np.nan if x == 0 else 0)
 defvjp(np.positive, lambda ans, x: lambda g: g)
 defvjp(np.negative, lambda ans, x: lambda g: -g)
 defvjp(
@@ -233,10 +233,8 @@ defvjp(np.conj, lambda ans, x: lambda g: np.conj(g))
 defvjp(
     np.where,
     None,
-    # lambda ans, c, x=None, y=None: lambda g: np.where(c, g, np.zeros_like(g)),
-    lambda ans, c, x=None, y=None: lambda g: np.where(c, g, np.zeros(np.shape(g))),
-    # lambda ans, c, x=None, y=None: lambda g: np.where(c, np.zeros_like(g), g),
-    lambda ans, c, x=None, y=None: lambda g: np.where(c, np.zeros(np.shape(g)), g),
+    lambda ans, c, x=None, y=None: lambda g: np.where(c, g, np.zeros_like(g)),
+    lambda ans, c, x=None, y=None: lambda g: np.where(c, np.zeros_like(g), g),
 )
 # defvjp(np.cross, lambda ans, a, b, axisa=-1, axisb=-1, axisc=-1, axis=None : lambda g:
 #                   np.cross(b, g, axisb, axisc, axisa, axis),
@@ -396,12 +394,15 @@ defvjp(np.transpose, grad_transpose)
 def repeat_to_match_shape(g, shape, dtype, axis, keepdims):
     """Returns the array g repeated along axis to fit vector space vs.
        Also returns the number of repetitions of the array."""
-    if shape == ():
-        return g, 1
-    axis = list(axis) if isinstance(axis, tuple) else axis
-    new_shape = np.array(shape, dtype=int)
-    new_shape[axis] = 1
-    num_reps = np.prod(np.array(shape)[axis])
+    from udiff import SKIP_SELF
+
+    with SKIP_SELF:
+        if shape == ():
+            return g, 1
+        axis = list(axis) if isinstance(axis, tuple) else axis
+        new_shape = np.array(shape, dtype=int)
+        new_shape[axis] = 1
+        num_reps = np.prod(np.array(shape)[axis])
     # Can't use broadcast_to because of numpy bug: https://github.com/numpy/numpy/issues/9165
     # return anp.broadcast_to(anp.reshape(g, new_shape), shape), num_reps
     return np.reshape(g, new_shape) + np.zeros(shape, dtype=dtype), num_reps
@@ -421,7 +422,7 @@ defvjp(np.broadcast_to, grad_broadcast_to)
 
 
 def grad_np_sum(ans, x, axis=None, keepdims=False, dtype=None):
-    shape, dtype = np.shape(x), x.dtype
+    shape, dtype = np.shape(x.value), x.dtype
     return lambda g: repeat_to_match_shape(g, shape, dtype, axis, keepdims)[0]
 
 
@@ -723,17 +724,17 @@ defvjp(np.sort, grad_sort)
 defvjp(np.msort, grad_sort)  # Until multi-D is allowed, these are the same.
 
 
-def grad_partition(ans, x, kth, axis=-1, kind="introselect", order=None):
-    # TODO: Cast input with np.asanyarray()
-    if len(np.shape(x)) > 1:
-        raise NotImplementedError(
-            "Gradient of partition not implemented for multi-dimensional arrays."
-        )
-    partition_perm = np.argpartition(x, kth, axis, kind, order)
-    return lambda g: unpermuter(g, partition_perm)
+# def grad_partition(ans, x, kth, axis=-1, kind="introselect", order=None):
+#     # TODO: Cast input with np.asanyarray()
+#     if len(np.shape(x)) > 1:
+#         raise NotImplementedError(
+#             "Gradient of partition not implemented for multi-dimensional arrays."
+#         )
+#     partition_perm = np.argpartition(x, kth, axis, kind, order)
+#     return lambda g: unpermuter(g, partition_perm)
 
 
-defvjp(np.partition, grad_partition)
+# defvjp(np.partition, grad_partition)
 
 # def unpermuter(g, permutation):
 #     unsort = np.zeros(len(permutation), dtype=int)
@@ -816,16 +817,18 @@ def metadata(A):
 
 
 def unbroadcast(x, target_meta, broadcast_idx=0):
-    target_shape, target_ndim, dtype = target_meta
-    # while x.ndim > target_ndim:
-    while np.ndim(x) > target_ndim:
-        x = np.sum(x, axis=broadcast_idx)
-    for axis, size in enumerate(target_shape):
-        if size == 1:
-            x = np.sum(x, axis=axis, keepdims=True)
-    # if np.iscomplexobj(x) and not target_iscomplex:
-    #     x = np.real(x)
-    return x
+    from udiff import SKIP_SELF
+
+    with SKIP_SELF:
+        target_shape, target_ndim, dtype = target_meta
+        while np.ndim(x) > target_ndim:
+            x = np.sum(x, axis=broadcast_idx)
+        for axis, size in enumerate(target_shape):
+            if size == 1:
+                x = np.sum(x, axis=axis, keepdims=True)
+        # if np.iscomplexobj(x) and not target_iscomplex:
+        #     x = np.real(x)
+        return x
 
 
 def unbroadcast_f(target, f):
@@ -853,7 +856,7 @@ def replace_zero(x, val):
 
 
 def replace_non_positive(x, val):
-    return np.where(x > 0, x, val)
+    return np.where(x.value > 0, x, val)
 
 
 # # ----- extra functions used internally  -----

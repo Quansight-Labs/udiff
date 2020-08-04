@@ -28,12 +28,12 @@ Getting started is easy:
 >>> from unumpy import numpy_backend
 >>> from numpy import allclose
 >>> import numpy as onp
->>> with ua.set_backend(numpy_backend), ua.set_backend(udiff, coerce=True):
+>>> with ua.set_backend(numpy_backend, coerce=True), ua.set_backend(udiff, coerce=True):
 ...    x1 = np.array([2])
 ...    x2 = np.array([5])
 ...    y = np.log(x1) + x1 * x2 - np.sin(x2)
-...    y.backward()
-...    print(allclose(x1.diff, [5.5]))
+...    x1_diff = y.to(x1)
+...    print(allclose(x1_diff.value, [5.5]))
 True
 
 """

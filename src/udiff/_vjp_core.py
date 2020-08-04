@@ -33,10 +33,7 @@ def defvjp(fun, *vjpmakers, **kwargs):
             raise NotImplementedError("VJP of {} not defined".format(fun.name))
 
         def ret(g):
-            from udiff import SKIP_SELF
-
-            with SKIP_SELF:
-                return tuple(vjp(g) for vjp in vjps)
+            return tuple(vjp(g) for vjp in vjps)
 
         return ret
 
@@ -45,8 +42,8 @@ def defvjp(fun, *vjpmakers, **kwargs):
 
 def translate_vjp(vjpfun, fun, argnum):
     if vjpfun is None:
-        # return lambda ans, *args, **kwargs: lambda g: np.zeros_like(args[argnum])
-        return lambda ans, *args, **kwargs: lambda g: np.zeros(np.shape(args[argnum]))
+        return lambda ans, *args, **kwargs: lambda g: np.zeros_like(args[argnum])
+        # return lambda ans, *args, **kwargs: lambda g: np.zeros(np.shape(args[argnum]))
     elif callable(vjpfun):
         return vjpfun
     else:

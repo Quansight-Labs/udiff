@@ -174,7 +174,7 @@ def test_unary_function(backend, func, y_d, domain):
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(x.diff, y_d_arr)
+    assert_allclose(x.diff[ret.name].value, y_d_arr)
 
 
 @pytest.mark.parametrize(
@@ -230,9 +230,99 @@ def test_arbitrary_function(backend, func, y_d, domain):
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(x.diff, y_d_arr)
+    assert_allclose(x.diff[ret.name].value, y_d_arr)
 
 
+@pytest.mark.xfail
+@pytest.mark.parametrize(
+    "u, v, func, u_jacobian, v_jacobian",
+    [
+        (
+            onp.arange(2).reshape(1, 2, 1),
+            onp.arange(2).reshape(1, 1, 2),
+            lambda x, y: np.matmul(x, y),
+            [[[[[[0], [0]]], [[[1], [0]]]], [[[[0], [0]]], [[[0], [1]]]]]],
+            [[[[[[0, 0]]], [[[0, 0]]]], [[[[1, 0]]], [[[0, 1]]]]]],
+        )
+    ],
+)
+def test_separation_binary(backend, u, v, func, u_jacobian, v_jacobian):
+    try:
+        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
+            u = np.asarray(u)
+            v = np.asarray(v)
+
+            ret = func(u, v)
+            u_jacobian = ret.to(u, jacobian=True)
+            v_jacobian = ret.to(v, jacobian=True)
+    except ua.BackendNotImplementedError:
+        if backend in FULLY_TESTED_BACKENDS:
+            raise
+        pytest.xfail(reason="The backend has no implementation for this ufunc.")
+
+    if isinstance(ret, da.Array):
+        ret.compute()
+
+    assert_allclose(u_jacobian.value, u_jacobian)
+    assert_allclose(v_jacobian.value, v_jacobian)
+
+
+@pytest.mark.parametrize(
+    "func, y_d, domain",
+    [
+        (lambda x: (2 * x + 1) ** 3, lambda x: 6 * (2 * x + 1) ** 2, (0.5, None)),
+        (
+            lambda x: np.sin(x ** 2) / (np.sin(x)) ** 2,
+            lambda x: (
+                2 * x * onp.cos(x ** 2) * onp.sin(x) - 2 * onp.sin(x ** 2) * onp.cos(x)
+            )
+            / (onp.sin(x)) ** 3,
+            (0, pi),
+        ),
+        (
+            lambda x: (np.log(x ** 2)) ** (1 / 3),
+            lambda x: 2 * (onp.log(x ** 2)) ** (-2 / 3) / (3 * x),
+            (1, None),
+        ),
+        (
+            lambda x: np.log((1 + x) / (1 - x)) / 4 - np.arctan(x) / 2,
+            lambda x: x ** 2 / (1 - x ** 4),
+            (-1, 1),
+        ),
+        (
+            lambda x: np.log(1 + x ** 2) / np.arctanh(x),
+            lambda x: (
+                (2 * x * onp.arctanh(x) / (1 + x ** 2))
+                - (onp.log(1 + x ** 2) / (1 - x ** 2))
+            )
+            / (onp.arctanh(x)) ** 2,
+            (0, 1),
+        ),
+    ],
+)
+def test_to_diff(backend, func, y_d, domain):
+    if domain is None:
+        x_arr = generate_test_data()
+    else:
+        x_arr = generate_test_data(a=domain[0], b=domain[1])
+    y_d_arr = [y_d(xa) for xa in x_arr]
+    try:
+        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
+            x = np.asarray(x_arr)
+            ret = func(x)
+            x_diff = ret.to(x)
+    except ua.BackendNotImplementedError:
+        if backend in FULLY_TESTED_BACKENDS:
+            raise
+        pytest.xfail(reason="The backend has no implementation for this ufunc.")
+
+    if isinstance(ret, da.Array):
+        ret.compute()
+
+    assert_allclose(x_diff.value, y_d_arr)
+
+
+@pytest.mark.xfail
 @pytest.mark.parametrize(
     "x, func, x_jacobian",
     [
@@ -260,12 +350,12 @@ def test_arbitrary_function(backend, func, y_d, domain):
         ),
     ],
 )
-def test_separation_unary(backend, x, func, x_jacobian):
+def test_to_jacobian(backend, x, func, x_jacobian):
     try:
         with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
             x = np.asarray(x)
             ret = func(x)
-            ret.backward_jacobian()
+            compute_jacobian = ret.to(x, jacobian=True)
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
@@ -274,29 +364,24 @@ def test_separation_unary(backend, x, func, x_jacobian):
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(x.jacobian, x_jacobian)
+    assert_allclose(compute_jacobian.value, x_jacobian)
 
 
 @pytest.mark.parametrize(
-    "u, v, func, u_jacobian, v_jacobian",
-    [
-        (
-            onp.arange(2).reshape(1, 2, 1),
-            onp.arange(2).reshape(1, 1, 2),
-            lambda x, y: np.matmul(x, y),
-            [[[[[[0], [0]]], [[[1], [0]]]], [[[[0], [0]]], [[[0], [1]]]]]],
-            [[[[[[0, 0]]], [[[0, 0]]]], [[[[1, 0]]], [[[0, 1]]]]]],
-        )
-    ],
+    "func, y_d, domain",
+    [(lambda x: (2 * x + 1) ** 3, lambda x: 24 * (2 * x + 1), (0.5, None)),],
 )
-def test_separation_binary(backend, u, v, func, u_jacobian, v_jacobian):
+def test_high_order_diff(backend, func, y_d, domain):
+    if domain is None:
+        x_arr = generate_test_data()
+    else:
+        x_arr = generate_test_data(a=domain[0], b=domain[1])
+    y_d_arr = [y_d(xa) for xa in x_arr]
     try:
         with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
-            u = np.asarray(u)
-            v = np.asarray(v)
-
-            ret = func(u, v)
-            ret.backward_jacobian()
+            x = np.asarray(x_arr)
+            ret = func(x)
+            x_diff = ret.to(x).to(x)
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
@@ -305,5 +390,4 @@ def test_separation_binary(backend, u, v, func, u_jacobian, v_jacobian):
     if isinstance(ret, da.Array):
         ret.compute()
 
-    assert_allclose(u.jacobian, u_jacobian)
-    assert_allclose(v.jacobian, v_jacobian)
+    assert_allclose(x_diff.value, y_d_arr)

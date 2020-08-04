@@ -47,6 +47,7 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+default.profraw
 
 # Translations
 *.mo
@@ -110,3 +111,5 @@ venv.bak/
 # IDEs
 .vscode/
 .idea/
+
+sandbox.py
