@@ -10,7 +10,10 @@ setuptools.setup(
     packages=setuptools.find_packages(where="src", exclude=["tests*"]),
     package_dir={"": "src"},
     include_package_data=True,
-    install_requires=("uarray >= 0.6.0", "unumpy >= 0.6.0"),
+    install_requires=(
+        "uarray @ git+https://github.com/Quansight-Labs/uarray@master#egg=uarray",
+        "unumpy @ git+https://github.com/Quansight-Labs/unumpy@master#egg=unumpy",
+    ),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Natural Language :: English",

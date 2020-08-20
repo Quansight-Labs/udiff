@@ -11,19 +11,18 @@ class DiffArray(np.ndarray):
     def __init__(self, arr):
         if isinstance(arr, DiffArray):
             self._value = arr.value
-            self._name = arr.name
+            self._id = arr.id
             self._parents = arr._parents
             self._vjp = arr._vjp
             self._diff = arr._diff
             self._jacobian = arr._jacobian
+            return
 
-        from udiff import SKIP_SELF
-
-        with SKIP_SELF:
+        with ua.determine_backend(arr, np.ndarray, domain="numpy", coerce=True):
             arr = np.asarray(arr)
 
         self._value = arr
-        self._name = "var_{}".format(uuid.uuid4())
+        self._id = uuid.uuid4()
         self._parents = []
         self._vjp = None
         self._diff = None
@@ -35,18 +34,19 @@ class DiffArray(np.ndarray):
 
     @property
     def shape(self):
-        from udiff import SKIP_SELF
+        return np.shape(self.value)
 
-        with SKIP_SELF:
-            return np.shape(self.value)
+    @property
+    def ndim(self):
+        return np.shape(self.value)
 
     @property
     def value(self):
         return self._value
 
     @property
-    def name(self):
-        return self._name
+    def id(self):
+        return self._id
 
     @property
     def diff(self):
@@ -80,10 +80,8 @@ class DiffArray(np.ndarray):
         self._vjp = vjpmaker(tuple(parent_argnums), self, tuple(vjp_args), kwargs)
 
     def __str__(self):
-        return "<{}, name={}, value=\n{}\n>".format(
-            type(self).__name__,
-            repr(self.name) if self.name is not None else "unbound",
-            str(self.value),
+        return "<{}, id={}, value=\n{}\n>".format(
+            type(self).__name__, repr(self.id), str(self.value),
         )
 
     def backward(self, grad_variables=None, end_node=None, base=None):
@@ -96,9 +94,9 @@ class DiffArray(np.ndarray):
             grad_variables = np.ones_like(self.value)
 
         if end_node is None:
-            end_node = self.name
+            end_node = self
 
-        if base is None or base == self.name:
+        if base is None or base.id == self.id:
             if self._diff is None:
                 self._diff = {}
 
@@ -113,7 +111,7 @@ class DiffArray(np.ndarray):
                 p.backward(diffs[pn], end_node, base)
 
     def _backward_jacobian(self, grad_variables, end_node, position, base):
-        if base is None or base == self.name:
+        if base is None or base.id == self.id:
             if self._jacobian is None:
                 self._jacobian = {}
 
@@ -132,33 +130,22 @@ class DiffArray(np.ndarray):
             for pn, p in self._parents:
                 p._backward_jacobian(diffs[pn], end_node, position, base)
 
-    def backward_jacobian(self, base=None):
-        """Backpropagation.
-        Traverse computation graph backwards in topological order from the end node.
-        For each node, compute local Jacobian contribution and accumulate.
-        If the input to `fun` has shape (in1, in2, ...) and the output has shape
-        (out1, out2, ...) then the Jacobian has shape (out1, out2, ..., in1,
-        in2, ...).
-        """
-        for pos in itertools.product(*[range(i) for i in self.shape]):
-            grad_variables = np.zeros_like(self.value)
-            grad_variables._value[pos] = 1
-            self._backward_jacobian(grad_variables, (self.name, self.shape), pos, base)
-
     def to(self, x, grad_variables=None, jacobian=False):
         if jacobian:
-            key = (self.name, self.shape)
-            if x._jacobian is None or key not in x._jacobian:
-                self.backward_jacobian(x.name)
+            if x._jacobian is None or self not in x._jacobian:
+                for position in itertools.product(*[range(i) for i in self.shape]):
+                    grad_variables = np.zeros_like(self.value)
+                    grad_variables._value[position] = 1
+                    self._backward_jacobian(grad_variables, self, position, base=x)
 
-            x.jacobian[key] = np.reshape(
-                np.stack(x.jacobian[key].values()), self.shape + x.shape
+            x.jacobian[self] = np.reshape(
+                np.stack(x.jacobian[self].values()), self.shape + x.shape
             )
-            return x.jacobian[key]
+            return x.jacobian[self]
         else:
-            if x._diff is None or self.name not in x._diff:
-                self.backward(grad_variables, base=x.name)
-            return x._diff[self.name]
+            if x._diff is None or self not in x._diff:
+                self.backward(grad_variables, base=x)
+            return x._diff[self]
 
     __repr__ = __str__
     __hash__ = object.__hash__

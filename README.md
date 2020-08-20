@@ -8,14 +8,13 @@ import unumpy as np
 import udiff
 from unumpy import numpy_backend
 
-with ua.set_backend(numpy_backend), ua.set_backend(udiff, coerce=True):
+with ua.set_backend(udiff.DiffArrayBackend(numpy_backend), coerce=True):
     x1 = np.reshape(np.arange(1, 26), (5, 5))
     x2 = np.reshape(np.arange(1, 26), (5, 5))
     y = np.log(x1) + x1 * x2 - np.sin(x2)
     print(y)
-    y.backward()
-    print(x1.diff)
-    print(x2.diff)
+    print(y.to(x1))
+    print(y.to(x2))
 ```
 
 ## Contributing

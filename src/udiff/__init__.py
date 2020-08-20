@@ -28,7 +28,7 @@ Getting started is easy:
 >>> from unumpy import numpy_backend
 >>> from numpy import allclose
 >>> import numpy as onp
->>> with ua.set_backend(numpy_backend, coerce=True), ua.set_backend(udiff, coerce=True):
+>>> with ua.set_backend(udiff.DiffArrayBackend(numpy_backend), coerce=True):
 ...    x1 = np.array([2])
 ...    x2 = np.array([5])
 ...    y = np.log(x1) + x1 * x2 - np.sin(x2)
@@ -42,17 +42,13 @@ import sys
 import uarray as ua
 
 from . import _vjp_diffs
-from ._uarray_plug import __ua_domain__, __ua_convert__, __ua_function__
+from ._uarray_plug import DiffArrayBackend
 from ._vjp_core import defvjp
 
 from ._diff_array import DiffArray
 
 __all__ = [
-    "__ua_domain__",
-    "__ua_convert__",
-    "__ua_function__",
+    "DiffArrayBackend",
     "defvjp",
     "DiffArray",
 ]
-
-SKIP_SELF = ua.skip_backend(sys.modules["udiff"])

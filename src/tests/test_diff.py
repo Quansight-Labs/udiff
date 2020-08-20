@@ -33,18 +33,6 @@ LIST_BACKENDS = [
 
 FULLY_TESTED_BACKENDS = [NumpyBackend, DaskBackend]
 
-# try:
-#     import unumpy.xnd_backend as XndBackend
-#     import xnd
-#     from ndtypes import ndt
-
-#     LIST_BACKENDS.append(XndBackend)
-#     FULLY_TESTED_BACKENDS.append(XndBackend)
-# except ImportError:
-#     XndBackend = None  # type: ignore
-#     LIST_BACKENDS.append(
-#         pytest.param(None, marks=pytest.mark.skip(reason="xnd is not importable"))
-#     )
 
 try:
     import unumpy.cupy_backend as CupyBackend
@@ -151,8 +139,8 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         (np.fabs, lambda x: 1 if x > 0 else -1, None),
         (np.reciprocal, lambda x: -1 / x ** 2, (1, 10)),
         (np.expm1, lambda x: exp(x), None),
-        # (np.rad2deg, lambda x: 1 / pi * 180.0, None),
-        # (np.deg2rad, lambda x: pi / 180.0, None),
+        (np.rad2deg, lambda x: 1 / pi * 180.0, None),
+        (np.deg2rad, lambda x: pi / 180.0, None),
     ],
 )
 def test_unary_function(backend, func, y_d, domain):
@@ -160,21 +148,118 @@ def test_unary_function(backend, func, y_d, domain):
         x_arr = generate_test_data()
     else:
         x_arr = generate_test_data(a=domain[0], b=domain[1])
-    y_d_arr = [y_d(xa) for xa in x_arr]
+    expect_diff = [y_d(xa) for xa in x_arr]
     try:
-        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
             x = np.asarray(x_arr)
-            ret = func(x)
-            ret.backward()
+            y = func(x)
+            x_diff = y.to(x)
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
         pytest.xfail(reason="The backend has no implementation for this ufunc.")
 
-    if isinstance(ret, da.Array):
-        ret.compute()
+    if isinstance(y, da.Array):
+        y.compute()
 
-    assert_allclose(x.diff[ret.name].value, y_d_arr)
+    assert_allclose(x_diff.value, expect_diff)
+
+
+@pytest.mark.parametrize(
+    "func, u_d, v_d, u_domain, v_domain",
+    [
+        (np.add, lambda u, v: 1, lambda u, v: 1, None, None),
+        (np.subtract, lambda u, v: 1, lambda u, v: -1, None, None),
+        (np.multiply, lambda u, v: v, lambda u, v: u, None, None),
+        (np.divide, lambda u, v: 1 / v, lambda u, v: -u / v ** 2, None, (0, None)),
+        (
+            np.maximum,
+            lambda u, v: 1 if u >= v else 0,
+            lambda u, v: 1 if v > u else 0,
+            None,
+            None,
+        ),
+        (
+            np.minimum,
+            lambda u, v: 1 if u <= v else 0,
+            lambda u, v: 1 if v <= u else 0,
+            None,
+            None,
+        ),
+        (
+            np.logaddexp,
+            lambda u, v: exp(u) / (exp(u) + exp(v)),
+            lambda u, v: exp(v) / (exp(u) + exp(v)),
+            (-1, 1),
+            (-1, 1),
+        ),
+        (
+            np.logaddexp2,
+            lambda u, v: 2 ** u / (2 ** u + 2 ** v),
+            lambda u, v: 2 ** v / (2 ** u + 2 ** v),
+            (-1, 1),
+            (-1, 1),
+        ),
+        (
+            np.true_divide,
+            lambda u, v: 1 / v,
+            lambda u, v: -u / (v ** 2),
+            (1, 5),
+            (1, 5),
+        ),
+        (np.mod, lambda u, v: 1, lambda u, v: -floor(u / v), (1, 10), (1, 10)),
+        (
+            np.power,
+            lambda u, v: pow(u, v) * v / u,
+            lambda u, v: pow(u, v) * log(u),
+            (1, 5),
+            (1, 5),
+        ),
+        (
+            np.arctan2,
+            lambda u, v: v / (u ** 2 + v ** 2),
+            lambda u, v: -u / (u ** 2 + v ** 2),
+            (0, 1),
+            (0, 1),
+        ),
+        (
+            np.hypot,
+            lambda u, v: u / sqrt(u ** 2 + v ** 2),
+            lambda u, v: v / sqrt(u ** 2 + v ** 2),
+            None,
+            None,
+        ),
+    ],
+)
+def test_binary_function(backend, func, u_d, v_d, u_domain, v_domain):
+    if u_domain is None:
+        u_arr = generate_test_data()
+    else:
+        u_arr = generate_test_data(a=u_domain[0], b=u_domain[1])
+    if v_domain is None:
+        v_arr = generate_test_data()
+    else:
+        v_arr = generate_test_data(a=v_domain[0], b=v_domain[1])
+
+    expect_u_diff = [u_d(ua, va) for ua, va in zip(u_arr, v_arr)]
+    expect_v_diff = [v_d(ua, va) for ua, va in zip(u_arr, v_arr)]
+    try:
+        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
+            u = np.asarray(u_arr)
+            v = np.asarray(v_arr)
+            y = func(u, v)
+            u_diff = y.to(u)
+            v_diff = y.to(v)
+    except ua.BackendNotImplementedError:
+        if backend in FULLY_TESTED_BACKENDS:
+            raise
+        pytest.xfail(reason="The backend has no implementation for this ufunc.")
+
+    if isinstance(y, da.Array):
+        y.compute()
+
+    assert_allclose(u_diff.value, expect_u_diff)
+    assert_allclose(v_diff.value, expect_v_diff)
 
 
 @pytest.mark.parametrize(
@@ -183,16 +268,14 @@ def test_unary_function(backend, func, y_d, domain):
         (lambda x: x * x, lambda x: 2 * x, None),
         (lambda x: (2 * x + 1) ** 3, lambda x: 6 * (2 * x + 1) ** 2, (0.5, None)),
         (
-            lambda x: np.sin(x ** 2) / (np.sin(x)) ** 2,
-            lambda x: (
-                2 * x * onp.cos(x ** 2) * onp.sin(x) - 2 * onp.sin(x ** 2) * onp.cos(x)
-            )
-            / (onp.sin(x)) ** 3,
+            lambda x: np.sin(x ** 2) / np.sin(x) ** 2,
+            lambda x: (2 * x * cos(x ** 2) * sin(x) - 2 * sin(x ** 2) * cos(x))
+            / sin(x) ** 3,
             (0, pi),
         ),
         (
-            lambda x: (np.log(x ** 2)) ** (1 / 3),
-            lambda x: 2 * (onp.log(x ** 2)) ** (-2 / 3) / (3 * x),
+            lambda x: np.log(x ** 2) ** (1 / 3),
+            lambda x: 2 * log(x ** 2) ** (-2 / 3) / (3 * x),
             (1, None),
         ),
         (
@@ -203,10 +286,9 @@ def test_unary_function(backend, func, y_d, domain):
         (
             lambda x: np.log(1 + x ** 2) / np.arctanh(x),
             lambda x: (
-                (2 * x * onp.arctanh(x) / (1 + x ** 2))
-                - (onp.log(1 + x ** 2) / (1 - x ** 2))
+                (2 * x * atanh(x) / (1 + x ** 2)) - (log(1 + x ** 2) / (1 - x ** 2))
             )
-            / (onp.arctanh(x)) ** 2,
+            / atanh(x) ** 2,
             (0, 1),
         ),
     ],
@@ -216,178 +298,69 @@ def test_arbitrary_function(backend, func, y_d, domain):
         x_arr = generate_test_data()
     else:
         x_arr = generate_test_data(a=domain[0], b=domain[1])
-    y_d_arr = [y_d(xa) for xa in x_arr]
+    expect_diff = [y_d(xa) for xa in x_arr]
     try:
-        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
             x = np.asarray(x_arr)
-            ret = func(x)
-            ret.backward()
+            y = func(x)
+            x_diff = y.to(x)
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
         pytest.xfail(reason="The backend has no implementation for this ufunc.")
 
-    if isinstance(ret, da.Array):
-        ret.compute()
+    if isinstance(y, da.Array):
+        y.compute()
 
-    assert_allclose(x.diff[ret.name].value, y_d_arr)
-
-
-@pytest.mark.xfail
-@pytest.mark.parametrize(
-    "u, v, func, u_jacobian, v_jacobian",
-    [
-        (
-            onp.arange(2).reshape(1, 2, 1),
-            onp.arange(2).reshape(1, 1, 2),
-            lambda x, y: np.matmul(x, y),
-            [[[[[[0], [0]]], [[[1], [0]]]], [[[[0], [0]]], [[[0], [1]]]]]],
-            [[[[[[0, 0]]], [[[0, 0]]]], [[[[1, 0]]], [[[0, 1]]]]]],
-        )
-    ],
-)
-def test_separation_binary(backend, u, v, func, u_jacobian, v_jacobian):
-    try:
-        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
-            u = np.asarray(u)
-            v = np.asarray(v)
-
-            ret = func(u, v)
-            u_jacobian = ret.to(u, jacobian=True)
-            v_jacobian = ret.to(v, jacobian=True)
-    except ua.BackendNotImplementedError:
-        if backend in FULLY_TESTED_BACKENDS:
-            raise
-        pytest.xfail(reason="The backend has no implementation for this ufunc.")
-
-    if isinstance(ret, da.Array):
-        ret.compute()
-
-    assert_allclose(u_jacobian.value, u_jacobian)
-    assert_allclose(v_jacobian.value, v_jacobian)
+    assert_allclose(x_diff.value, expect_diff)
 
 
+# @pytest.mark.skip
 @pytest.mark.parametrize(
     "func, y_d, domain",
     [
-        (lambda x: (2 * x + 1) ** 3, lambda x: 6 * (2 * x + 1) ** 2, (0.5, None)),
+        (lambda x: x * x, lambda x: 2, None),
+        (lambda x: (2 * x + 1) ** 3, lambda x: 24 * (2 * x + 1), (0.5, None)),
         (
-            lambda x: np.sin(x ** 2) / (np.sin(x)) ** 2,
-            lambda x: (
-                2 * x * onp.cos(x ** 2) * onp.sin(x) - 2 * onp.sin(x ** 2) * onp.cos(x)
-            )
-            / (onp.sin(x)) ** 3,
+            lambda x: np.sin(x ** 2) + np.sin(x) ** 2,
+            lambda x: 2 * cos(x ** 2)
+            - 4 * x ** 2 * sin(x ** 2)
+            + 2 * cos(x) ** 2
+            - 2 * sin(x) ** 2,
             (0, pi),
         ),
+        (lambda x: np.log(x ** 2), lambda x: -2 / x ** 2, (1, None),),
         (
-            lambda x: (np.log(x ** 2)) ** (1 / 3),
-            lambda x: 2 * (onp.log(x ** 2)) ** (-2 / 3) / (3 * x),
-            (1, None),
+            lambda x: np.power(np.cos(x), 2) * np.log(x),
+            lambda x: -2 * cos(2 * x) * log(x)
+            - 2 * sin(2 * x) / x
+            - cos(x) ** 2 / x ** 2,
+            (0, None),
         ),
         (
-            lambda x: np.log((1 + x) / (1 - x)) / 4 - np.arctan(x) / 2,
-            lambda x: x ** 2 / (1 - x ** 4),
+            lambda x: x / np.sqrt(1 - x ** 2),
+            lambda x: 3 * x / (1 - x ** 2) ** (5 / 2),
             (-1, 1),
         ),
-        (
-            lambda x: np.log(1 + x ** 2) / np.arctanh(x),
-            lambda x: (
-                (2 * x * onp.arctanh(x) / (1 + x ** 2))
-                - (onp.log(1 + x ** 2) / (1 - x ** 2))
-            )
-            / (onp.arctanh(x)) ** 2,
-            (0, 1),
-        ),
     ],
-)
-def test_to_diff(backend, func, y_d, domain):
-    if domain is None:
-        x_arr = generate_test_data()
-    else:
-        x_arr = generate_test_data(a=domain[0], b=domain[1])
-    y_d_arr = [y_d(xa) for xa in x_arr]
-    try:
-        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
-            x = np.asarray(x_arr)
-            ret = func(x)
-            x_diff = ret.to(x)
-    except ua.BackendNotImplementedError:
-        if backend in FULLY_TESTED_BACKENDS:
-            raise
-        pytest.xfail(reason="The backend has no implementation for this ufunc.")
-
-    if isinstance(ret, da.Array):
-        ret.compute()
-
-    assert_allclose(x_diff.value, y_d_arr)
-
-
-@pytest.mark.xfail
-@pytest.mark.parametrize(
-    "x, func, x_jacobian",
-    [
-        (
-            onp.arange(12).reshape(2, 3, 2),
-            lambda x: np.sum(x, axis=1),
-            [
-                [
-                    [[[1, 0], [1, 0], [1, 0]], [[0, 0], [0, 0], [0, 0]]],
-                    [[[0, 1], [0, 1], [0, 1]], [[0, 0], [0, 0], [0, 0]]],
-                ],
-                [
-                    [[[0, 0], [0, 0], [0, 0]], [[1, 0], [1, 0], [1, 0]]],
-                    [[[0, 0], [0, 0], [0, 0]], [[0, 1], [0, 1], [0, 1]]],
-                ],
-            ],
-        ),
-        (
-            onp.arange(4).reshape((2, 2)),
-            lambda x: x,
-            [
-                [[[1, 0], [0, 0]], [[0, 1], [0, 0]]],
-                [[[0, 0], [1, 0]], [[0, 0], [0, 1]]],
-            ],
-        ),
-    ],
-)
-def test_to_jacobian(backend, x, func, x_jacobian):
-    try:
-        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
-            x = np.asarray(x)
-            ret = func(x)
-            compute_jacobian = ret.to(x, jacobian=True)
-    except ua.BackendNotImplementedError:
-        if backend in FULLY_TESTED_BACKENDS:
-            raise
-        pytest.xfail(reason="The backend has no implementation for this ufunc.")
-
-    if isinstance(ret, da.Array):
-        ret.compute()
-
-    assert_allclose(compute_jacobian.value, x_jacobian)
-
-
-@pytest.mark.parametrize(
-    "func, y_d, domain",
-    [(lambda x: (2 * x + 1) ** 3, lambda x: 24 * (2 * x + 1), (0.5, None)),],
 )
 def test_high_order_diff(backend, func, y_d, domain):
     if domain is None:
         x_arr = generate_test_data()
     else:
         x_arr = generate_test_data(a=domain[0], b=domain[1])
-    y_d_arr = [y_d(xa) for xa in x_arr]
+    expect_diff = [y_d(xa) for xa in x_arr]
     try:
-        with ua.set_backend(backend, coerce=True), ua.set_backend(udiff, coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
             x = np.asarray(x_arr)
-            ret = func(x)
-            x_diff = ret.to(x).to(x)
+            y = func(x)
+            x_diff = y.to(x).to(x)
     except ua.BackendNotImplementedError:
         if backend in FULLY_TESTED_BACKENDS:
             raise
         pytest.xfail(reason="The backend has no implementation for this ufunc.")
 
-    if isinstance(ret, da.Array):
-        ret.compute()
+    if isinstance(y, da.Array):
+        y.compute()
 
-    assert_allclose(x_diff.value, y_d_arr)
+    assert_allclose(x_diff.value, expect_diff)
