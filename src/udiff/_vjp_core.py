@@ -43,7 +43,6 @@ def defvjp(fun, *vjpmakers, **kwargs):
 def translate_vjp(vjpfun, fun, argnum):
     if vjpfun is None:
         return lambda ans, *args, **kwargs: lambda g: np.zeros_like(args[argnum])
-        # return lambda ans, *args, **kwargs: lambda g: np.zeros(np.shape(args[argnum]))
     elif callable(vjpfun):
         return vjpfun
     else:
