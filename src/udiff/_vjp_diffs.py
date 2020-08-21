@@ -1,6 +1,5 @@
 from ._vjp_core import defvjp
 
-# from ._diff_array import DiffArray
 import uarray as ua
 import unumpy as np
 from unumpy import numpy_backend
@@ -26,7 +25,6 @@ raw_functions = set(
         np.greater_equal,
         np.less,
         np.less_equal,
-        # np.result_type,
         np.logical_and,
         np.logical_or,
         np.logical_not,
@@ -67,7 +65,6 @@ nograd_functions = set(
         np.searchsorted,
         np.sign,
         np.floor_divide,
-        # np.round,
         np.around,
         np.fix,
         np.zeros_like,
@@ -231,12 +228,6 @@ defvjp(np.diag, lambda ans, x, k=0: lambda g: np.diag(g, k))
 defvjp(np.flipud, lambda ans, x,: lambda g: np.flipud(g))
 defvjp(np.fliplr, lambda ans, x,: lambda g: np.fliplr(g))
 defvjp(np.rot90, lambda ans, x, k=1: lambda g: np.rot90(g, -k))
-# defvjp(
-#     np.trace,
-#     lambda ans, x, offset=0: lambda g: np.einsum(
-#         "ij,...->ij...", np.eye(x.shape[0], x.shape[1], k=offset), g
-#     ),
-# )
 defvjp(
     np.full,
     lambda ans, shape, fill_value, dtype=None: lambda g: np.sum(g),
@@ -284,13 +275,6 @@ defvjp(
     lambda ans, start, stop, num: lambda g: np.dot(np.linspace(0.0, 1.0, num), g),
 )
 
-# defvjp(
-#     np._astype,
-#     lambda ans, A, dtype, order="K", casting="unsafe", subok=True, copy=True: lambda g: np._astype(
-#         g, A.dtype
-#     ),
-# )
-
 # ----- Trickier grads -----
 def grad_rollaxis(ans, a, axis, start=0):
     if axis < 0:
@@ -325,35 +309,6 @@ def stack_diff(ans, x, axis=0):
 
 
 defvjp(np.stack, stack_diff)
-
-
-# def grad_diff(ans, a, n=1, axis=-1):
-#     nd = np.ndim(a)
-#     ans_shape = np.shape(ans)
-#     sl1 = [slice(None)] * nd
-#     sl1[axis] = slice(None, 1)
-
-#     sl2 = [slice(None)] * nd
-#     sl2[axis] = slice(-1, None)
-
-#     def undiff(g):
-#         if g.shape[axis] > 0:
-#             return np.concatenate(
-#                 (-g[tuple(sl1)], -np.diff(g, axis=axis), g[tuple(sl2)]), axis=axis
-#             )
-#         shape = list(ans_shape)
-#         shape[axis] = 1
-#         return np.zeros(shape)
-
-#     def helper(g, n):
-#         if n == 0:
-#             return g
-#         return helper(undiff(g), n - 1)
-
-#     return lambda g: helper(g, n)
-
-
-# defvjp(np.diff, grad_diff)
 
 
 def grad_gradient(ans, x, *vargs, **kwargs):
@@ -443,35 +398,6 @@ def grad_tile(ans, x, reps):
 defvjp(np.tile, grad_tile)
 
 
-# def grad_kron(argnum, ans, orig_A, orig_B):
-#     # kron has different promotion rules than dot. the reshapes are necessary if
-#     # and only if (1) orig_B is 1D or (2) orig_A and/or orig_B are 0D
-#     orig_A_shape = np.shape(orig_A)
-#     orig_B_shape = np.shape(orig_B)
-
-#     def vjp(G):
-#         A, B = np.atleast_2d(orig_A), np.atleast_2d(orig_B)
-#         shape = list(np.shape(A) + np.shape(B))
-#         n = np.ndim(A)
-#         shape[n - 1], shape[n] = shape[n], shape[n - 1]
-#         reshaped_G = np.swapaxes(np.reshape(G, shape), n - 1, n)
-#         if argnum == 0:
-#             return match_complex(
-#                 orig_A,
-#                 np.reshape(np.tensordot(reshaped_G, B, axes=np.ndim(B)), orig_A_shape),
-#             )
-#         else:
-#             return match_complex(
-#                 orig_B,
-#                 np.reshape(np.tensordot(A, reshaped_G, axes=np.ndim(A)), orig_B_shape),
-#             )
-
-#     return vjp
-
-
-# defvjp(np.kron, partial(grad_kron, 0), partial(grad_kron, 1))
-
-
 def grad_transpose(ans, x, axes=None):
     if axes is not None:
         axes = np.argsort(axes)
@@ -479,24 +405,6 @@ def grad_transpose(ans, x, axes=None):
 
 
 defvjp(np.transpose, grad_transpose)
-
-
-# def repeat_to_match_shape(g, shape, dtype, axis, keepdims):
-#     """Returns the array g repeated along axis to fit vector space vs.
-#        Also returns the number of repetitions of the array."""
-#     with ua.determine_backend(g, np.ndarray, domain="numpy"):
-#         nd = np.ndim(g)
-#         if axis is None:
-#             axis = range(nd)
-#         if not isinstance(axis, collections.abc.Sequence):
-#             axis = (axis,)
-
-#         axis = set(axis)
-#         new_shape = tuple(1 if a in axis else shape[a] for a in range(nd))
-#         num_reps = reduce(operator.mul, (shape[a] for a in axis), 1)
-#     # Can't use broadcast_to because of numpy bug: https://github.com/numpy/numpy/issues/9165
-#     return np.broadcast_to(np.reshape(g, new_shape), shape), num_reps
-#     # return np.reshape(g, new_shape), num_reps
 
 
 def repeat_to_match_shape(g, shape, dtype, axis, keepdims):
@@ -509,9 +417,7 @@ def repeat_to_match_shape(g, shape, dtype, axis, keepdims):
         new_shape = np.array(shape, dtype=int)
         new_shape[axis] = 1
         num_reps = np.prod(np.array(shape)[axis])
-    # Can't use broadcast_to because of numpy bug: https://github.com/numpy/numpy/issues/9165
     return np.broadcast_to(np.reshape(g, new_shape), shape), num_reps
-    # return np.reshape(g, new_shape) + np.zeros(shape, dtype=dtype), num_reps
 
 
 def grad_broadcast_to(ans, x, new_shape):
@@ -537,19 +443,6 @@ def grad_np_sum(ans, x, axis=None, keepdims=False, dtype=None):
 defvjp(np.sum, grad_np_sum)
 
 
-# def grad_np_mean(ans, x, axis=None, keepdims=False):
-#     shape, dtype = np.shape(x), np.result_type(x)
-
-#     def vjp(g):
-#         g_repeated, num_reps = repeat_to_match_shape(g, shape, dtype, axis, keepdims)
-#         return g_repeated / num_reps
-
-#     return vjp
-
-
-# defvjp(np.mean, grad_np_mean)
-
-
 def grad_np_prod(ans, x, axis=None, keepdims=False):  # TODO: Support tuples of axes.
     shape, dtype = np.shape(x), x.dtype
 
@@ -570,7 +463,6 @@ def grad_np_var(ans, x, axis=None, ddof=0, keepdims=False):
         if iscomplex:
             g = g + 0j
         g_repeated, num_reps = repeat_to_match_shape(g, shape, dtype, axis, keepdims)
-        # x_minus_mean = np.conj(x - np.mean(x, axis=axis, keepdims=True))
         x_minus_mean = np.conj(x - x / np.sum(x, axis=axis, keepdims=True))
         return 2.0 * g_repeated * x_minus_mean / (num_reps - ddof)
 
@@ -595,7 +487,6 @@ def grad_np_std(ans, x, axis=None, ddof=0, keepdims=False):
             g_repeated, num_reps = repeat_to_match_shape(
                 g / ans, shape, dtype, axis, keepdims
             )
-            # x_minus_mean = np.conj(x - np.mean(x, axis=axis, keepdims=True))
             x_minus_mean = np.conj(x - x / np.sum(x, axis=axis, keepdims=True))
             return g_repeated * x_minus_mean / (num_reps - ddof)
 
@@ -625,8 +516,6 @@ def grad_chooser(ans, x, axis=None, keepdims=None):
 
 defvjp(np.max, grad_chooser)
 defvjp(np.min, grad_chooser)
-# defvjp(np.amax, grad_chooser)
-# defvjp(np.amin, grad_chooser)
 
 
 def reverse_axis(x, axis):
@@ -646,21 +535,6 @@ def grad_np_cumsum(ans, x, axis=None):
 
 
 defvjp(np.cumsum, grad_np_cumsum)
-
-
-# def grad_inner(argnum, ans, A, B):
-#     A_ndim, B_ndim = np.ndim(A), np.ndim(B)
-#     if A_ndim == 0 or B_ndim == 0:
-#         axes = ([], [])
-#     else:
-#         axes = ([A_ndim - 1], [B_ndim - 1])
-#     if argnum == 0:
-#         return lambda G: tensordot_adjoint_0(B, G, axes, A_ndim, B_ndim)
-#     elif argnum == 1:
-#         return lambda G: tensordot_adjoint_1(A, G, axes, A_ndim, B_ndim)
-
-
-# defvjp(np.inner, partial(grad_inner, 0), partial(grad_inner, 1))
 
 
 def matmul_adjoint_0(B, G, A_meta, B_ndim):
@@ -713,177 +587,7 @@ def matmul_vjp_1(ans, A, B):
 defvjp(np.matmul, matmul_vjp_0, matmul_vjp_1)
 
 
-# def dot_adjoint_0(B, G, A_meta, B_meta):
-#     _, A_ndim, A_dtype, _ = A_meta
-#     _, B_ndim, _, _ = B_meta
-#     if B_ndim == 0 or B_ndim == 1 or A_ndim == 0:
-#         contract_num = max(0, B_ndim - (A_ndim != 0))
-#         out = onp.tensordot(G, B, contract_num)
-#     else:
-#         out = onp.tensordot(G, onp.swapaxes(B, -1, -2), B_ndim - 1)
-#     return onp.asarray(out, dtype=A_dtype)
-
-
-# def dot_adjoint_1(A, G, A_meta, B_meta):
-#     _, A_ndim, _, _ = A_meta
-#     _, B_ndim, B_dtype, _ = B_meta
-#     needs_transpose = B_ndim > 1 and A_ndim != 0
-#     swap = (lambda x: onp.swapaxes(x, -1, -2)) if needs_transpose else (lambda x: x)
-#     if A_ndim == 0 or A_ndim == 1 or B_ndim == 0:
-#         contract_num = max(0, A_ndim - (B_ndim != 0))
-#         out = swap(onp.tensordot(G, A, contract_num))
-#     else:
-#         out = swap(
-#             onp.tensordot(
-#                 G, A, [range(-A_ndim - B_ndim + 2, -B_ndim + 1), range(A_ndim - 1)]
-#             )
-#         )
-#     return onp.asarray(out, dtype=B_dtype)
-
-
-# def dot_vjp_0(ans, A, B):
-#     A_meta, B_meta = metadata(A), metadata(B)
-#     return lambda g: match_complex(A, dot_adjoint_0(B, g, A_meta, B_meta))
-
-
-# def dot_vjp_1(ans, A, B):
-#     A_meta, B_meta = metadata(A), metadata(B)
-#     return lambda g: match_complex(B, dot_adjoint_1(A, g, A_meta, B_meta))
-
-
-# defvjp(np.dot, dot_vjp_0, dot_vjp_1)
-
-# defvjp(
-#     dot_adjoint_0,
-#     lambda ans, B, g, An, Bn: lambda A: match_complex(B, dot_adjoint_1(A, g, An, Bn)),
-#     lambda ans, B, g, An, Bn: lambda A: match_complex(g, np.dot(A, B)),
-# )
-
-# defvjp(
-#     dot_adjoint_1,
-#     lambda ans, A, g, An, Bn: lambda B: match_complex(A, dot_adjoint_0(B, g, An, Bn)),
-#     lambda ans, A, g, An, Bn: lambda B: match_complex(g, np.dot(A, B)),
-# )
-
-
-# def tensordot_adjoint_0(B, G, axes, A_ndim, B_ndim):
-#     # The adjoint of the operator
-#     # A |--> np.tensordot(A, B, axes)
-#     if B_ndim == 0:
-#         return G * B
-
-#     G_axes = onp.arange(onp.ndim(G))
-#     if type(axes) is int:
-#         axes = max(axes, 0)
-#         B_axes = onp.arange(B_ndim)
-#         return onp.tensordot(G, B, [G_axes[A_ndim - axes :], B_axes[axes:]])
-#     else:
-#         axes0 = [axes[0]] if type(axes[0]) is int else axes[0]
-#         axes1 = [axes[1]] if type(axes[1]) is int else axes[1]
-#         axes = [axes0, axes1]
-#         A_axes = onp.arange(A_ndim)
-#         B_axes = onp.arange(B_ndim)
-#         summed_axes = [
-#             onp.asarray(axes[0], dtype="int64") % A_ndim,
-#             onp.asarray(axes[1], dtype="int64") % B_ndim,
-#         ]
-#         other_axes = [
-#             onp.delete(A_axes, summed_axes[0]),
-#             onp.delete(B_axes, summed_axes[1]),
-#         ]
-#         out = onp.tensordot(G, B, [G_axes[len(other_axes[0]) :], other_axes[1]])
-#         perm = onp.argsort(
-#             onp.concatenate(
-#                 (other_axes[0], summed_axes[0][onp.argsort(summed_axes[1])])
-#             )
-#         )
-#         return onp.transpose(out, perm)
-
-
-# def tensordot_adjoint_1(A, G, axes, A_ndim, B_ndim):
-#     # The adjoint of the operator
-#     # B |--> np.tensordot(A, B, axes)
-#     if A_ndim == 0:
-#         return G * A
-
-#     G_axes = onp.arange(onp.ndim(G))
-#     if type(axes) is int:
-#         axes = max(axes, 0)
-#         A_axes = onp.arange(A_ndim)
-#         return onp.tensordot(A, G, [A_axes[: A_ndim - axes], G_axes[: A_ndim - axes]])
-#     else:
-#         axes0 = [axes[0]] if type(axes[0]) is int else axes[0]
-#         axes1 = [axes[1]] if type(axes[1]) is int else axes[1]
-#         axes = [axes0, axes1]
-#         A_axes = onp.arange(A_ndim)
-#         B_axes = onp.arange(B_ndim)
-#         summed_axes = [
-#             onp.asarray(axes[0], dtype="int64") % A_ndim,
-#             onp.asarray(axes[1], dtype="int64") % B_ndim,
-#         ]
-#         other_axes = [
-#             onp.delete(A_axes, summed_axes[0]),
-#             onp.delete(B_axes, summed_axes[1]),
-#         ]
-#         out = onp.tensordot(A, G, [other_axes[0], G_axes[: len(other_axes[0])]])
-#         perm = onp.argsort(
-#             onp.concatenate(
-#                 (summed_axes[1][onp.argsort(summed_axes[0])], other_axes[1])
-#             )
-#         )
-#         return onp.transpose(out, perm)
-
-
-# def tensordot_vjp_0(ans, A, B, axes=2):
-#     A_ndim, B_ndim = np.ndim(A), np.ndim(B)
-#     return lambda G: match_complex(A, tensordot_adjoint_0(B, G, axes, A_ndim, B_ndim))
-
-
-# def tensordot_vjp_1(ans, A, B, axes=2):
-#     A_ndim, B_ndim = np.ndim(A), np.ndim(B)
-#     return lambda G: match_complex(B, tensordot_adjoint_1(A, G, axes, A_ndim, B_ndim))
-
-
-# defvjp(np.tensordot, tensordot_vjp_0, tensordot_vjp_1)
-# defvjp(
-#     tensordot_adjoint_0,
-#     lambda ans, B, G, axes, An, Bn: lambda A: match_complex(
-#         B, tensordot_adjoint_1(A, G, axes, An, Bn)
-#     ),
-#     lambda ans, B, G, axes, An, Bn: lambda A: match_complex(
-#         G, np.tensordot(A, B, axes)
-#     ),
-# )
-# defvjp(
-#     tensordot_adjoint_1,
-#     lambda ans, A, G, axes, An, Bn: lambda B: match_complex(
-#         A, tensordot_adjoint_0(B, G, axes, An, Bn)
-#     ),
-#     lambda ans, A, G, axes, An, Bn: lambda B: match_complex(
-#         G, np.tensordot(A, B, axes)
-#     ),
-# )
-# defvjp(
-#     np.outer,
-#     lambda ans, a, b: lambda g: match_complex(a, np.dot(g, b.T)),
-#     lambda ans, a, b: lambda g: match_complex(b, np.dot(a.T, g)),
-# )
-
-
-# def grad_concatenate_args(argnum, ans, axis_args, kwargs):
-#     axis, args = axis_args[0], axis_args[1:]
-#     sizes = [np.shape(a)[axis] for a in args[:argnum]]
-#     start = sum(sizes[:-1])
-#     idxs = [slice(None)] * ans.ndim
-#     idxs[axis] = slice(start, start + sizes[-1])
-#     return lambda g: g[tuple(idxs)]
-
-
-# defvjp_argnum(np.concatenate_args, grad_concatenate_args)
-
-
 def grad_sort(ans, x, axis=-1, kind="quicksort", order=None):
-    # TODO: Cast input with np.asanyarray()
     if len(np.shape(x)) > 1:
         raise NotImplementedError(
             "Gradient of sort not implemented for multi-dimensional arrays."
@@ -897,7 +601,6 @@ defvjp(np.msort, grad_sort)  # Until multi-D is allowed, these are the same.
 
 
 def grad_partition(ans, x, kth, axis=-1, kind="introselect", order=None):
-    # TODO: Cast input with np.asanyarray()
     if len(np.shape(x)) > 1:
         raise NotImplementedError(
             "Gradient of partition not implemented for multi-dimensional arrays."
@@ -926,78 +629,6 @@ defvjp(np.atleast_2d, grad_reshape_list)
 defvjp(np.atleast_3d, grad_reshape_list)
 
 
-# def grad_einsum(argnum, ans, operands_, kwargs):
-#     result_meta = metadata(operands_[argnum])
-
-#     def vjp(g):
-#         operands = operands_
-#         if isinstance(operands[0], string_types):  # using "ijk" convention.
-#             in_subs, out_subs, _ = np.parse_einsum_input(*operands)
-#             string, operands = operands[0], operands[1:]
-
-#             in_subs_list = in_subs.split(",")
-#             op_num = argnum - 1
-#             subs_wrt = in_subs_list[op_num]
-#             rest_of_ops = operands[:op_num] + operands[op_num + 1 :]
-#             rest_of_subs = in_subs_list[:op_num] + in_subs_list[op_num + 1 :]
-
-#             # subscripts that only appear in subs_wrt (and not in other subscript lists
-#             # or in the output) are implicitly being summed out, as if contracted
-#             # against a tensor of ones. we make that tensor of ones explicit to handle
-#             # the necessary vjp broadcasting inside einsum.
-#             other_named_subs = set("".join([out_subs] + rest_of_subs))
-#             naked_summed = [
-#                 (i, sub)
-#                 for i, sub in enumerate(subs_wrt)
-#                 if sub not in other_named_subs
-#             ]
-#             if naked_summed:
-#                 naked_summed_dims, ones_subs = zip(*naked_summed)
-#                 ones_subs = "".join(ones_subs)
-#                 ones = onp.ones(
-#                     onp.array(operands[op_num].shape)[list(naked_summed_dims)]
-#                 )
-#                 new_input_subs = ",".join([out_subs, ones_subs] + rest_of_subs)
-#                 new_operands = (g, ones) + rest_of_ops
-#             else:
-#                 new_input_subs = ",".join([out_subs] + rest_of_subs)
-#                 new_operands = (g,) + rest_of_ops
-
-#             new_subscripts = new_input_subs + "->" + subs_wrt
-#             return unbroadcast(np.einsum(new_subscripts, *new_operands), result_meta)
-#         else:  # using (op0, sublist0, op1, sublist1, ..., sublistout) convention
-#             if len(operands) % 2 == 0:
-#                 raise NotImplementedError("Need sublistout argument")
-#             operands = list(operands)
-#             rest_of_ops = (
-#                 [operands[-1]]
-#                 + operands[:argnum]
-#                 + operands[(argnum + 2) : -1]
-#                 + [operands[argnum + 1]]
-#             )
-#             return unbroadcast_einsum(
-#                 np.einsum(g, *rest_of_ops), result_meta, operands[argnum + 1]
-#             )
-
-#     return vjp
-
-
-# defvjp_argnum(np.einsum, grad_einsum)
-
-# defvjp(
-#     np.diagonal,
-#     lambda ans, A, offset=0, axis1=0, axis2=1: lambda g: np.make_diagonal(
-#         g, offset, axis1, axis2
-#     ),
-# )
-# defvjp(
-#     np.make_diagonal,
-#     lambda ans, D, offset=0, axis1=0, axis2=1: lambda g: np.diagonal(
-#         g, offset, axis1, axis2
-#     ),
-# )
-
-
 def match_complex(target, x):
     target_iscomplex = np.iscomplexobj(target)
     x_iscomplex = np.iscomplexobj(x)
@@ -1020,8 +651,8 @@ def unbroadcast(x, target_meta, broadcast_idx=0):
     for axis, size in enumerate(target_shape):
         if size == 1:
             x = np.sum(x, axis=axis, keepdims=True)
-    # if np.iscomplexobj(x) and not target_iscomplex:
-    #     x = np.real(x)
+    if np.iscomplexobj(x) and not target_iscomplex:
+        x = np.real(x)
     return x
 
 
@@ -1053,45 +684,7 @@ def replace_non_positive(x, val):
     return np.where(x.value > 0, x, val)
 
 
-# # ----- extra functions used internally  -----
-
-
-# def array_from_args_gradmaker(argnum, ans, args, kwargs):
-#     return lambda g: g[argnum - 2]
-
-
-# defvjp_argnum(np.array_from_args, array_from_args_gradmaker)
-
-
-# def array_from_scalar_or_array_gradmaker(ans, array_args, array_kwargs, scarray):
-#     ndmin = array_kwargs.get("ndmin", 0)
-#     scarray_ndim = np.ndim(scarray)
-#     if ndmin > scarray_ndim:
-#         return lambda g: np.squeeze(g, axis=tuple(range(ndmin - scarray_ndim)))
-#     else:
-#         return lambda g: g
-
-
-# defvjp(
-#     np._array_from_scalar_or_array, array_from_scalar_or_array_gradmaker, argnums=(2, 3)
-# )
-
-
-# def untake(x, idx, vs):
-#     if isinstance(idx, list) and (len(idx) == 0 or not isinstance(idx[0], slice)):
-#         idx = np.array(idx, dtype="int64")
-
-#     def mut_add(A):
-#         np.add.at(A, idx, x)
-#         return A
-
-#     return SparseObject(vs, mut_add)
-
-
-# defvjp(
-#     func(ArrayBox.__getitem__), lambda ans, A, idx: lambda g: untake(g, idx, vspace(A))
-# )
-# defvjp(untake, lambda ans, x, idx, _: lambda g: g[idx])
+# ----- extra functions used internally  -----
 
 
 def _unpad(array, width):
