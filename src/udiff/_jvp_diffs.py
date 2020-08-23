@@ -4,10 +4,6 @@ from ._vjp_diffs import (
     match_complex,
     replace_zero,
     metadata,
-    # dot_adjoint_0,
-    # dot_adjoint_1,
-    # tensordot_adjoint_0,
-    # tensordot_adjoint_1,
     nograd_functions,
 )
 from ._core import (
@@ -104,11 +100,9 @@ defjvp(np.expand_dims, "same")
 defjvp(np.squeeze, "same")
 defjvp(np.diag, "same")
 defjvp(np.diagonal, "same")
-# defjvp(np.make_diagonal, "same")
 defjvp(np.flipud, "same")
 defjvp(np.fliplr, "same")
 defjvp(np.rot90, "same")
-# defjvp(np.trace, "same")
 defjvp(np.full, "same", argnums=(1,))
 defjvp(np.triu, "same")
 defjvp(np.tril, "same")
@@ -119,11 +113,6 @@ defjvp(np.broadcast_to, "same")
 def_linear(np.cross)
 
 # ----- Simple grads -----
-# defjvp(
-#     np.abs,
-#     lambda g, ans, x: np.real(g * replace_zero(np.conj(x), 0.0))
-#     / replace_zero(ans, 1.0),
-# )
 defjvp(np.fabs, lambda g, ans, x: np.sign(x) * g)  # fabs doesn't take complex numbers.
 defjvp(np.absolute, lambda g, ans, x: np.real(g * np.conj(x)) / ans)
 defjvp(np.reciprocal, lambda g, ans, x: -g / x ** 2)
@@ -181,7 +170,7 @@ defjvp(np.repeat, "same")
 defjvp(np.tile, "same")
 defjvp(np.transpose, "same")
 defjvp(np.sum, "same")
-# defjvp(np.mean, "same")
+
 defjvp(
     np.prod,
     lambda g, ans, x, axis=None, keepdims=False: ans
@@ -249,22 +238,11 @@ def fwd_grad_chooser(g, ans, x, axis=None, keepdims=False):
 
 defjvp(np.max, fwd_grad_chooser)
 defjvp(np.min, fwd_grad_chooser)
-# defjvp(np.amax, fwd_grad_chooser)
-# defjvp(np.amin, fwd_grad_chooser)
+
 
 defjvp(np.cumsum, "same")
 
-# def_linear(np.inner)
 def_linear(np.matmul)
-# def_linear(np.dot)
-# def_linear(np.tensordot)
-# def_linear(np.outer)
-
-# def_linear(dot_adjoint_0)
-# def_linear(dot_adjoint_1)
-
-# def_linear(tensordot_adjoint_0)
-# def_linear(tensordot_adjoint_1)
 
 
 def fwd_grad_sort(g, ans, x, axis=-1, kind="quicksort", order=None):
@@ -297,8 +275,6 @@ defjvp(np.atleast_1d, atleast_jvpmaker(np.atleast_1d))
 defjvp(np.atleast_2d, atleast_jvpmaker(np.atleast_2d))
 defjvp(np.atleast_3d, atleast_jvpmaker(np.atleast_3d))
 
-# def_linear(np.einsum)
-
 
 def broadcast(x, target):
     target_shape, target_ndim, target_dtype, target_iscomplex = metadata(target)
@@ -307,7 +283,6 @@ def broadcast(x, target):
     for axis, size in enumerate(np.shape(x)):
         if size == 1:
             x = np.repeat(x, target_shape[axis], axis=axis)
-        # x = x + 0j
     return x
 
 
