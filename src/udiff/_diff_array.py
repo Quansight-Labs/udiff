@@ -2,31 +2,37 @@ import uuid
 import uarray as ua
 import unumpy as np
 import itertools
-from ._vjp_core import primitive_vjps
-
-import unumpy as np
+from ._core import primitive_vjps, primitive_jvps
 
 
 class DiffArray(np.ndarray):
-    def __init__(self, arr):
+    def __init__(self, arr, mode):
         if isinstance(arr, DiffArray):
             self._value = arr.value
             self._id = arr.id
             self._parents = arr._parents
-            self._vjp = arr._vjp
-            self._diff = arr._diff
+            self._jvp_diff = arr._jvp_diff
+            self._vjp_func = arr._vjp_func
+            self._vjp_diff = arr._vjp_diff
             self._jacobian = arr._jacobian
+            self._mode = arr._mode
             return
 
         with ua.determine_backend(arr, np.ndarray, domain="numpy", coerce=True):
             arr = np.asarray(arr)
 
         self._value = arr
+        self._mode = mode
         self._id = uuid.uuid4()
         self._parents = []
-        self._vjp = None
-        self._diff = None
+        self._jvp_diff = {}
+        self._vjp_func = None
+        self._vjp_diff = None
         self._jacobian = None
+
+    @property
+    def mode(self):
+        return self._mode
 
     @property
     def dtype(self):
@@ -47,14 +53,6 @@ class DiffArray(np.ndarray):
     @property
     def id(self):
         return self._id
-
-    @property
-    def diff(self):
-        return self._diff
-
-    @property
-    def jacobian(self):
-        return self._jacobian
 
     def register_vjp(self, func, args, kwargs):
         try:
@@ -77,7 +75,44 @@ class DiffArray(np.ndarray):
             elif not isinstance(arg, np.ufunc):
                 vjp_args.append(arg)
 
-        self._vjp = vjpmaker(tuple(parent_argnums), self, tuple(vjp_args), kwargs)
+        self._vjp_func = vjpmaker(tuple(parent_argnums), self, tuple(vjp_args), kwargs)
+
+    def register_jvp(self, func, args, kwargs):
+        try:
+            if func is np.ufunc.__call__:
+                jvpmaker = primitive_jvps[args[0]]
+            else:
+                jvpmaker = primitive_jvps[func]
+        except KeyError:
+            raise NotImplementedError("JVP of func not defined")
+
+        pn = 0
+        parent_argnums, jvp_args, start_nodes = [], [], []
+
+        for arg in args:
+            if isinstance(arg, DiffArray):
+                self._parents.append((pn, arg))
+                parent_argnums.append(pn)
+                pn += 1
+                jvp_args.append(arg.value)
+
+                if not arg._jvp_diff:
+                    arg._jvp_diff[arg] = np.ones_like(arg.value)
+
+                start_nodes += list(arg._jvp_diff.keys())
+
+            elif not isinstance(arg, np.ufunc):
+                jvp_args.append(arg)
+
+        for sn in set(start_nodes):
+            parent_jvps = [
+                parent._jvp_diff.get(sn, np.zeros_like(parent.value))
+                for _, parent in self._parents
+            ]
+
+            self._jvp_diff[sn] = jvpmaker(
+                tuple(parent_argnums), parent_jvps, self.value, tuple(jvp_args), kwargs
+            )
 
     def __str__(self):
         return "<{}, id={}, value=\n{}\n>".format(
@@ -97,16 +132,16 @@ class DiffArray(np.ndarray):
             end_node = self
 
         if base is None or base.id == self.id:
-            if self._diff is None:
-                self._diff = {}
+            if self._vjp_diff is None:
+                self._vjp_diff = {}
 
-            if end_node in self._diff:
-                self._diff[end_node] = self._diff[end_node] + grad_variables
+            if end_node in self._vjp_diff:
+                self._vjp_diff[end_node] = self._vjp_diff[end_node] + grad_variables
             else:
-                self._diff[end_node] = grad_variables
+                self._vjp_diff[end_node] = grad_variables
 
-        if self._vjp:
-            diffs = list(self._vjp(grad_variables))
+        if self._vjp_func:
+            diffs = list(self._vjp_func(grad_variables))
             for pn, p in self._parents:
                 p.backward(diffs[pn], end_node, base)
 
@@ -125,27 +160,34 @@ class DiffArray(np.ndarray):
                     self._jacobian[end_node][position] + grad_variables
                 )
 
-        if self._vjp:
-            diffs = list(self._vjp(grad_variables))
+        if self._vjp_func:
+            diffs = list(self._vjp_func(grad_variables))
             for pn, p in self._parents:
                 p._backward_jacobian(diffs[pn], end_node, position, base)
 
     def to(self, x, grad_variables=None, jacobian=False):
-        if jacobian:
-            if x._jacobian is None or self not in x._jacobian:
-                for position in itertools.product(*[range(i) for i in self.shape]):
-                    grad_variables = np.zeros_like(self.value)
-                    grad_variables._value[position] = 1
-                    self._backward_jacobian(grad_variables, self, position, base=x)
+        if self.mode == "vjp":
+            if jacobian:
+                if x._jacobian is None or self not in x._jacobian:
+                    for position in itertools.product(*[range(i) for i in self.shape]):
+                        grad_variables = np.zeros_like(self.value)
+                        grad_variables.value[position] = 1
+                        self._backward_jacobian(grad_variables, self, position, base=x)
 
-            x.jacobian[self] = np.reshape(
-                np.stack(x.jacobian[self].values()), self.shape + x.shape
-            )
-            return x.jacobian[self]
-        else:
-            if x._diff is None or self not in x._diff:
-                self.backward(grad_variables, base=x)
-            return x._diff[self]
+                x._jacobian[self] = np.reshape(
+                    np.stack(x._jacobian[self].values()), self.shape + x.shape
+                )
+                return x._jacobian[self]
+            else:
+                if x._vjp_diff is None or self not in x._vjp_diff:
+                    self.backward(grad_variables, base=x)
+                return x._vjp_diff[self]
+        elif self.mode == "jvp":
+            if jacobian or grad_variables:
+                raise NotImplementedError(
+                    "JVP does not yet support grad_variables, jacobian and higher order derivative"
+                )
+            return self._jvp_diff[x]
 
     __repr__ = __str__
     __hash__ = object.__hash__

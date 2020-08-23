@@ -41,14 +41,17 @@ True
 import sys
 import uarray as ua
 
-from . import _vjp_diffs
+from . import _vjp_diffs, _jvp_diffs
 from ._uarray_plug import DiffArrayBackend
-from ._vjp_core import defvjp
+from ._core import defvjp, defvjp_argnum, defjvp, defjvp_argnum
 
 from ._diff_array import DiffArray
 
 __all__ = [
     "DiffArrayBackend",
-    "defvjp",
     "DiffArray",
+    "defvjp",
+    "defvjp_argnum",
+    "defjvp",
+    "defjvp_argnum",
 ]

@@ -1,4 +1,4 @@
-from ._vjp_core import defvjp
+from ._core import defvjp, defvjp_argnum
 
 import uarray as ua
 import unumpy as np
