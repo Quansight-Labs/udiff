@@ -113,6 +113,8 @@ defjvp(np.broadcast_to, "same")
 def_linear(np.cross)
 
 # ----- Simple grads -----
+defjvp(np.positive, lambda g, ans, x: np.ones_like(x) * g)
+defjvp(np.negative, lambda g, ans, x: -np.ones_like(x) * g)
 defjvp(np.fabs, lambda g, ans, x: np.sign(x) * g)  # fabs doesn't take complex numbers.
 defjvp(np.absolute, lambda g, ans, x: np.real(g * np.conj(x)) / ans)
 defjvp(np.reciprocal, lambda g, ans, x: -g / x ** 2)

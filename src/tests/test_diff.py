@@ -70,6 +70,12 @@ def backend(request):
     return backend
 
 
+@pytest.fixture(scope="session", params=["vjp", "jvp"])
+def mode(request):
+    mode = request.param
+    return mode
+
+
 def generate_test_data(n_elements=12, a=None, b=None):
     if a is None:
         a = -10
@@ -143,14 +149,14 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         (np.deg2rad, lambda x: pi / 180.0, None),
     ],
 )
-def test_unary_function(backend, func, y_d, domain):
+def test_unary_function(backend, mode, func, y_d, domain):
     if domain is None:
         x_arr = generate_test_data()
     else:
         x_arr = generate_test_data(a=domain[0], b=domain[1])
     expect_diff = [y_d(xa) for xa in x_arr]
     try:
-        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend, mode=mode), coerce=True):
             x = np.asarray(x_arr)
             y = func(x)
             x_diff = y.to(x)
@@ -162,7 +168,10 @@ def test_unary_function(backend, func, y_d, domain):
     if isinstance(y, da.Array):
         y.compute()
 
-    assert_allclose(x_diff.value, expect_diff)
+    if mode == "vjp":
+        assert_allclose(x_diff.value, expect_diff)
+    elif mode == "jvp":
+        assert_allclose(x_diff, expect_diff)
 
 
 @pytest.mark.parametrize(
@@ -231,7 +240,7 @@ def test_unary_function(backend, func, y_d, domain):
         ),
     ],
 )
-def test_binary_function(backend, func, u_d, v_d, u_domain, v_domain):
+def test_binary_function(backend, mode, func, u_d, v_d, u_domain, v_domain):
     if u_domain is None:
         u_arr = generate_test_data()
     else:
@@ -244,7 +253,7 @@ def test_binary_function(backend, func, u_d, v_d, u_domain, v_domain):
     expect_u_diff = [u_d(ua, va) for ua, va in zip(u_arr, v_arr)]
     expect_v_diff = [v_d(ua, va) for ua, va in zip(u_arr, v_arr)]
     try:
-        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend, mode=mode), coerce=True):
             u = np.asarray(u_arr)
             v = np.asarray(v_arr)
             y = func(u, v)
@@ -254,12 +263,20 @@ def test_binary_function(backend, func, u_d, v_d, u_domain, v_domain):
         if backend in FULLY_TESTED_BACKENDS:
             raise
         pytest.xfail(reason="The backend has no implementation for this ufunc.")
+    except NotImplementedError:
+        pytest.xfail(
+            reason="The func has no implementation in the {} mode.".format(mode)
+        )
 
     if isinstance(y, da.Array):
         y.compute()
 
-    assert_allclose(u_diff.value, expect_u_diff)
-    assert_allclose(v_diff.value, expect_v_diff)
+    if mode == "vjp":
+        assert_allclose(u_diff.value, expect_u_diff)
+        assert_allclose(v_diff.value, expect_v_diff)
+    elif mode == "jvp":
+        assert_allclose(u_diff, expect_u_diff)
+        assert_allclose(v_diff, expect_v_diff)
 
 
 @pytest.mark.parametrize(
@@ -293,14 +310,14 @@ def test_binary_function(backend, func, u_d, v_d, u_domain, v_domain):
         ),
     ],
 )
-def test_arbitrary_function(backend, func, y_d, domain):
+def test_arbitrary_function(backend, mode, func, y_d, domain):
     if domain is None:
         x_arr = generate_test_data()
     else:
         x_arr = generate_test_data(a=domain[0], b=domain[1])
     expect_diff = [y_d(xa) for xa in x_arr]
     try:
-        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend, mode=mode), coerce=True):
             x = np.asarray(x_arr)
             y = func(x)
             x_diff = y.to(x)
@@ -312,7 +329,10 @@ def test_arbitrary_function(backend, func, y_d, domain):
     if isinstance(y, da.Array):
         y.compute()
 
-    assert_allclose(x_diff.value, expect_diff)
+    if mode == "vjp":
+        assert_allclose(x_diff.value, expect_diff)
+    elif mode == "jvp":
+        assert_allclose(x_diff, expect_diff)
 
 
 # @pytest.mark.skip
