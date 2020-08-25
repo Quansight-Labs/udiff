@@ -27,8 +27,9 @@ class DiffArrayBackend:
     def self_implementations(self):
         return {unumpy.ClassOverrideMeta.overridden_class.fget: self.overridden_class}
 
-    def __init__(self, inner):
+    def __init__(self, inner, mode="vjp"):
         self._inner = inner
+        self._mode = mode
 
     def overridden_class(self, self2):
         if self is ndarray:
@@ -62,10 +63,14 @@ class DiffArrayBackend:
 
         if real_func not in raw_functions:
             with ua.set_backend(self._inner, coerce=True):
-                out = DiffArray(out)
+                out = DiffArray(out, self._mode)
 
             if real_func not in nograd_functions:
-                out.register_vjp(func, args, kwargs)
+                if self._mode == "vjp":
+                    out.register_vjp(func, args, kwargs)
+                elif self._mode == "jvp":
+                    with ua.set_backend(numpy_backend, coerce=True):
+                        out.register_jvp(func, args, kwargs)
 
         return out
 
@@ -94,7 +99,7 @@ class DiffArrayBackend:
 
             if coerce:
                 with ua.set_backend(self._inner, coerce=True):
-                    return DiffArray(np.asarray(value))
+                    return DiffArray(np.asarray(value), self._mode)
 
             return NotImplemented
 
