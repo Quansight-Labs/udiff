@@ -7,7 +7,7 @@ import unumpy
 import unumpy as np
 import uarray as ua
 
-from ._diff_array import DiffArray
+from ._diff_array import DiffArray, VJPDiffArray, JVPDiffArray
 from ._vjp_diffs import nograd_functions, raw_functions
 
 from typing import Dict
@@ -28,12 +28,18 @@ class DiffArrayBackend:
         return {unumpy.ClassOverrideMeta.overridden_class.fget: self.overridden_class}
 
     def __init__(self, inner, mode="vjp"):
+        mode = mode.lower()
+        if mode not in ["vjp", "jvp"]:
+            raise ValueError("mode must be vjp or jvp")
         self._inner = inner
         self._mode = mode
 
     def overridden_class(self, self2):
         if self is ndarray:
-            return DiffArray
+            if self._mode == "vjp":
+                return VJPDiffArray
+            else:
+                return JVPDiffArray
 
         with ua.set_backend(self._inner, only=True):
             return self2.overridden_class
@@ -63,14 +69,13 @@ class DiffArrayBackend:
 
         if real_func not in raw_functions:
             with ua.set_backend(self._inner, coerce=True):
-                out = DiffArray(out, self._mode)
+                if self._mode == "vjp":
+                    out = VJPDiffArray(out)
+                else:
+                    out = JVPDiffArray(out)
 
             if real_func not in nograd_functions:
-                if self._mode == "vjp":
-                    out.register_vjp(func, args, kwargs)
-                elif self._mode == "jvp":
-                    with ua.set_backend(numpy_backend, coerce=True):
-                        out.register_jvp(func, args, kwargs)
+                out.register_diff(func, args, kwargs)
 
         return out
 
@@ -99,7 +104,10 @@ class DiffArrayBackend:
 
             if coerce:
                 with ua.set_backend(self._inner, coerce=True):
-                    return DiffArray(np.asarray(value), self._mode)
+                    if self._mode == "vjp":
+                        return VJPDiffArray(np.asarray(value))
+                    else:
+                        return JVPDiffArray(np.asarray(value))
 
             return NotImplemented
 
