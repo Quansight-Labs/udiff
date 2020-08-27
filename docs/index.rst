@@ -20,20 +20,20 @@ possible to change the used backend via a context manager.
 .. toctree::
    :maxdepth: 1
    :caption: Installation
-   
+
    install
 
 .. toctree::
    :maxdepth: 1
    :caption: Tutorials
-   
+
    notebooks/quickstart
    notebooks/linear_regression
 
 .. toctree::
    :maxdepth: 1
    :caption: API documentation
-    
+
    generated/udiff
 
 .. toctree::
