@@ -1,4 +1,4 @@
-﻿def\_linear
+def\_linear
 ===========
 
 .. currentmodule:: udiff

@@ -1,4 +1,4 @@
-﻿DiffArray
+DiffArray
 =========
 
 .. currentmodule:: udiff

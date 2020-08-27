@@ -1,4 +1,4 @@
-﻿VJPDiffArray
+VJPDiffArray
 ============
 
 .. currentmodule:: udiff

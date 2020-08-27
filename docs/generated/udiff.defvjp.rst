@@ -1,4 +1,4 @@
-﻿defvjp
+defvjp
 ======
 
 .. currentmodule:: udiff
