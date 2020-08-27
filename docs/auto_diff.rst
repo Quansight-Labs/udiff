@@ -1,9 +1,6 @@
 Automatic Differentiation
 ================================
 
-What is Automatic Differentiation?
-------------------------------------
-
 The optimization process of deep learning models is based on the gradient
 descent method. Deep learning frameworks such as PyTorch and Tensorflow can
 be divided into three parts: model api, gradient calculation and gpu
@@ -11,7 +8,7 @@ acceleration. Gradient calculation plays an important role, and the core
 technology of this part is automatic differentiation.
 
 Differential Methods
-^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------
 
 There are four differential methods:
 
@@ -48,8 +45,8 @@ swell" is prone to occur.
 The last is our protagonist: automatic differentiation. It is also the most
 widely used derivation method in programe.
 
-Automatic Differentiation
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+What is Automatic Differentiation?
+------------------------------------
 
 The automatic differentiation discovers the essence of
 differential calculation:
@@ -89,7 +86,7 @@ efficient; if the Jacobian matrix is wider, then the reverse mode is more
 efficient.
 
 ``JVP``, ``VJP`` and ``vmap``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------
 
 If you have used pytorch, you will find that if ``y`` is a tensor instead of a
 scalar, you will be asked to pass a  ``grad_variables`` in ``y.backward()``.
@@ -112,18 +109,18 @@ Google's new deep learning framework JAX uses a more advanced method, the
 vectorization operation vmap to speed up the calculation.
 
 Reference
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------
 * `The Autodiff Cookbook <https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html>`_
 * `Automatic Differentiation in Machine Learning: a Survey <https://arxiv.org/pdf/1502.05767.pdf>`_
 
-How to implement vjp?
-------------------------------------
+How to implement ``VJP``?
+================================
 
 This article describes how to build an automatic differentiation framework
 based on vjp.
 
 Basic vjp differential operator
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------
 
 The vjp differential operator is the cornerstone of automatic differentiation
 system from based on vjp. Because some differential operators are too
@@ -148,7 +145,7 @@ derivative, such as the ``axis`` of `np.sum`. The second stage (back
 propagation) inputs the gradient ``g``.
 
 Build calculation graph
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------
 
 We can express any calculation as a directed acyclic graph. For example, the
 formula
@@ -162,53 +159,24 @@ the calculation graph can be expressed as follows:
 
 For back propagation, we need to define a data structure to retain
 each node in the calculation graph. Assuming this data structure is
-``DiffArray``, the class should have the following attributes:
+``VJPDiffArray``, the class should have the following attributes:
 
-* ``name``: The name of the node.
+* ``_id``: The id of the node.
 
-* ``value``: The value of the node, such as ln2.
+* ``_value``: The value of the node, such as ``ln2``.
 
-* ``parents``: The nodes that point to the current node, for example, the
-  ``parents`` of ``v4`` is ``[v2, v3]``.
+* ``_parents``: The nodes that point to the current node, for example, the
+  ``_parents`` of ``v4`` is ``[v2, v3]``.
 
 * ``vjp``: A function that calculates the gradient of the current node to its
   parents. The function inputs ``ans``, ``x``, and ``y`` during forward
   propagation. Then you just need input ``g`` during backward propagation.
 
-All these attributes are assigned by a function called ``register_vjp`` during
+All these attributes are assigned by a function called ``register_diff`` during
 forward propagation.
 
-.. code-block:: python
-
-    def register_vjp(self, func, args, kwargs):
-        try:
-            if func is np.ufunc.__call__:
-                vjpmaker = primitive_vjps[args[0]]
-            else:
-                vjpmaker = primitive_vjps[func]
-        except KeyError:
-            raise NotImplementedError("VJP of func not defined")
-        parent_argnums = []
-        vjp_args = []
-        pn = 0
-        for arg in args:
-            if isinstance(arg, DiffArray):
-                self._parents.append((pn, arg))
-                parent_argnums.append(pn)
-                pn += 1
-                vjp_args.append(arg.value)
-            elif not isinstance(arg, np.ufunc):
-                vjp_args.append(arg)
-
-        from udiff import SKIP_SELF
-
-        with SKIP_SELF:
-            self._vjp = vjpmaker(
-                tuple(parent_argnums), self.value, tuple(vjp_args), kwargs
-            )
-
-Back propagation
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Backward propagation
+------------------------------------
 
 After constructing the calculation graph, the process of derivation is
 relatively simple, we can express it as a back propagation on the calculation
@@ -217,36 +185,5 @@ graph:
 .. image:: _static/backward.png
 
 For each node, we input the gradient of the previous node to current node to
-obtain the gradient of the current node to ``parents``. This process is
-implemented by the `backward` function:
-
-.. code-block:: python
-
-    def backward(self, grad_variables=None, end_node=None):
-        """
-        Backpropagation.
-        Traverse computation graph backwards in topological order from the end node.
-        For each node, compute local gradient contribution and accumulate.
-        """
-        from udiff import SKIP_SELF
-
-        with SKIP_SELF:
-            if grad_variables is None:
-                # grad_variables = np.ones_like(self.value)
-                grad_variables = np.ones(np.shape(self.value))
-            if end_node is None:
-                end_node = self.name
-            if self._diff is None or self._visit != end_node:
-                # self._diff = np.zeros_like(self.value)
-                self._diff = np.zeros(np.shape(self.value))
-            self._diff += grad_variables
-            self._visit = end_node
-            if self._vjp:
-                diffs = list(self._vjp(grad_variables))
-                for pn, p in self._parents:
-                    p.backward(diffs[pn], self._visit)
-
-
-In addition, if ``x`` is used in two or more calculations,
-the gradient of ``x`` will be accumulate wrongly. So I added an attribute
-``_visit`` in ``DiffArray``, indicating the end point to be derived.
+obtain the gradient of the current node to ``_parents``. This process is
+implemented by the `backward` function.

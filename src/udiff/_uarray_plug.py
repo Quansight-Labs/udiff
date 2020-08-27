@@ -16,6 +16,23 @@ _ufunc_mapping: Dict[ufunc, np.ufunc] = {}
 
 
 class DiffArrayBackend:
+    """
+    The backend used for udiff.
+
+    Attributes
+    ----------
+    _inner
+        The backend used, such as numpy_backend.
+
+    _mode: default vjp.
+        The mode used to calculate gradient. It must be vjp or jvp.
+
+    Examples
+    --------
+    >>> with ua.set_backend(udiff.DiffArrayBackend(numpy_backend), coerce=True):
+    ...    x = np.array([2])
+    """
+
     __ua_domain__ = "numpy"
 
     _implementations: Dict = {
@@ -25,6 +42,9 @@ class DiffArrayBackend:
     @property
     @functools.lru_cache(None)
     def self_implementations(self):
+        """
+        Specify the data type to be converted.
+        """
         return {unumpy.ClassOverrideMeta.overridden_class.fget: self.overridden_class}
 
     def __init__(self, inner, mode="vjp"):
@@ -35,6 +55,9 @@ class DiffArrayBackend:
         self._mode = mode
 
     def overridden_class(self, self2):
+        """
+        Convert ndarray to VJPDiffArray or JVPDiffArray according to mode.
+        """
         if self is ndarray:
             if self._mode == "vjp":
                 return VJPDiffArray
@@ -80,6 +103,9 @@ class DiffArrayBackend:
         return out
 
     def replace_arrays(self, func, a, kw, arrays):
+        """
+        Convert the parameters in func to primitive types.
+        """
         d = tuple(func.arg_extractor(*a, **kw))
         arrays = tuple(arrays)
         new_d = []

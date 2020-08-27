@@ -23,6 +23,22 @@ def defvjp_argnum(fun, vjpmaker):
 
 
 def defvjp(fun, *vjpmakers, **kwargs):
+    """
+    Set up a unumpy-transformable function for a VJP rule definition.
+
+
+    Parameters
+    ----------
+    fun : np.ufunc
+        The function need to be derived.
+    *jvpfuns : 
+        Functions for calculating derivative. 
+
+    Examples
+    --------
+    >>> defvjp(np.positive, lambda ans, x: lambda g: g)
+
+    """
     argnums = kwargs.get("argnums", count())
     vjps_dict = {
         argnum: translate_vjp(vjpmaker, fun, argnum)
@@ -73,7 +89,6 @@ def defjvp_argnums(fun, jvpmaker):
 
 def defjvp_argnum(fun, jvpmaker):
     def jvp_argnums(argnums, gs, ans, args, kwargs):
-        # with ua.set_backend(numpy_backend, coerce=True):
         return sum_outgrads(
             jvpmaker(argnum, g, ans, args, kwargs) for argnum, g in zip(argnums, gs)
         )
@@ -82,6 +97,25 @@ def defjvp_argnum(fun, jvpmaker):
 
 
 def defjvp(fun, *jvpfuns, **kwargs):
+    """
+    Set up a unumpy-transformable function for a JVP rule definition.
+
+    Parameters
+    ----------
+    fun : np.ufunc
+        The function need to be derived.
+    *jvpfuns : 
+        Functions for calculating derivative. 
+
+    Examples
+    --------
+    >>> defjvp(
+    ...     np.subtract,
+    ...     lambda g, ans, x, y: broadcast(g, ans),
+    ...     lambda g, ans, x, y: broadcast(-g, ans),
+    ... )
+
+    """
     argnums = kwargs.get("argnums", count())
     jvps_dict = {
         argnum: translate_jvp(jvpfun, fun, argnum)
@@ -89,7 +123,6 @@ def defjvp(fun, *jvpfuns, **kwargs):
     }
 
     def jvp_argnums(argnums, gs, ans, args, kwargs):
-        # with ua.set_backend(numpy_backend, coerce=True):
         return sum_outgrads(
             jvps_dict[argnum](g, ans, *args, **kwargs) for argnum, g in zip(argnums, gs)
         )
@@ -109,7 +142,19 @@ def translate_jvp(jvpfun, fun, argnum):
 
 
 def def_linear(fun):
-    """Flags that a function is linear wrt all args"""
+    """
+    Flags that a function is linear wrt all args.
+
+    Parameters
+    ----------
+    fun : np.ufunc
+        The function need to be derived.
+
+    Examples
+    --------
+    >>> def_linear(np.matmul)
+
+    """
     defjvp_argnum(
         fun,
         lambda argnum, g, ans, args, kwargs: fun(*subval(args, argnum, g), **kwargs),

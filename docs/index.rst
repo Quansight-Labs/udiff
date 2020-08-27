@@ -18,11 +18,29 @@ calculations of different data types(scalar, tensor and matrix). In addition, it
 possible to change the used backend via a context manager.
 
 .. toctree::
-    :hidden:
-    :maxdepth: 3
+   :maxdepth: 1
+   :caption: Installation
+   
+   install
 
-    generated/udiff
-    auto_diff.rst
+.. toctree::
+   :maxdepth: 1
+   :caption: Tutorials
+   
+   notebooks/quickstart
+   notebooks/linear_regression
+
+.. toctree::
+   :maxdepth: 1
+   :caption: API documentation
+    
+   generated/udiff
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Developer documentation
+
+   auto_diff
 
 Indices and tables
 ==================

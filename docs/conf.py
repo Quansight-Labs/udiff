@@ -34,6 +34,7 @@ release = "0.6.0-alpha"
 # extensions coming with Sphinx (named "sphinx.ext.*") or your custom
 # ones.
 extensions: List[str] = [
+    "nbsphinx",
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
@@ -168,5 +169,8 @@ intersphinx_mapping = {
 }
 
 doctest_global_setup = """
+import uarray as ua
+import unumpy as np
+from unumpy import numpy_backend
 import udiff
 """
