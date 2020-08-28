@@ -105,9 +105,6 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         rel_error = abs(grad_numerical - grad_analytic) / (
             abs(grad_numerical) + abs(grad_analytic)
         )
-        print(grad_numerical)
-        print(grad_analytic)
-        print(rel_error)
         assert_almost_equal(rel_error, 0, decimal=5)
 
 
