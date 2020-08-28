@@ -205,7 +205,7 @@ class VJPDiffArray(DiffArray):
         ...    x2 = np.array([5])
         ...    y = np.log(x1) + x1 * x2 - np.sin(x2)
         ...    x1_diff = y.to(x1)
-        ...    print(allclose(x1_diff.value, [5.5]))
+        ...    print(onp.allclose(x1_diff.value, [5.5]))
         True
         """
         if jacobian:
@@ -330,7 +330,7 @@ class JVPDiffArray(DiffArray):
         ...    x2 = np.array([5])
         ...    y = np.log(x1) + x1 * x2 - np.sin(x2)
         ...    x1_diff = y.to(x1)
-        ...    print(allclose(x1_diff.value, [5.5]))
+        ...    print(onp.allclose(x1_diff, [5.5]))
         True
         """
         if jacobian:
