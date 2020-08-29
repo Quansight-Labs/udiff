@@ -328,9 +328,9 @@ class JVPDiffArray(DiffArray):
         ...
         ...    x1 = np.array([2])
         ...    x2 = np.array([5])
-        ...    y = np.log(x1) + x1 * x2 - np.sin(x2)
+        ...    y = x1 * x2
         ...    x1_diff = y.to(x1)
-        ...    print(np.allclose(x1_diff, [5.5]))
+        ...    print(np.allclose(x1_diff, x2.value))
         True
         """
         if jacobian:
