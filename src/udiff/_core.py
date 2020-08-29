@@ -110,9 +110,9 @@ def defjvp(fun, *jvpfuns, **kwargs):
     Examples
     --------
     >>> defjvp(
-    ...     np.subtract,
-    ...     lambda g, ans, x, y: broadcast(g, ans),
-    ...     lambda g, ans, x, y: broadcast(-g, ans),
+    ...     np.arctan2,
+    ...     lambda g, ans, x, y: g * y / (x ** 2 + y ** 2),
+    ...     lambda g, ans, x, y: g * -x / (x ** 2 + y ** 2),
     ... )
 
     """

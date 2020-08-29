@@ -21,13 +21,13 @@ def_linear(np.multiply)
 # ----- Binary ufuncs -----
 defjvp(
     np.add,
-    lambda g, ans, x, y: broadcast(g, ans),
-    lambda g, ans, x, y: broadcast(g, ans),
+    lambda g, ans, x, y: np.broadcast_to(g, np.shape(ans)),
+    lambda g, ans, x, y: np.broadcast_to(g, np.shape(ans)),
 )
 defjvp(
     np.subtract,
-    lambda g, ans, x, y: broadcast(g, ans),
-    lambda g, ans, x, y: broadcast(-g, ans),
+    lambda g, ans, x, y: np.broadcast_to(g, np.shape(ans)),
+    lambda g, ans, x, y: np.broadcast_to(-g, np.shape(ans)),
 )
 defjvp(np.divide, "same", lambda g, ans, x, y: -g * x / y ** 2)
 defjvp(
@@ -63,12 +63,12 @@ defjvp(
 defjvp(np.true_divide, "same", lambda g, ans, x, y: -g * x / y ** 2)
 defjvp(
     np.mod,
-    lambda g, ans, x, y: broadcast(g, ans),
+    lambda g, ans, x, y: np.broadcast_to(g, np.shape(ans)),
     lambda g, ans, x, y: -g * np.floor(x / y),
 )
 defjvp(
     np.remainder,
-    lambda g, ans, x, y: broadcast(g, ans),
+    lambda g, ans, x, y: np.broadcast_to(g, np.shape(ans)),
     lambda g, ans, x, y: -g * np.floor(x / y),
 )
 defjvp(
@@ -276,16 +276,6 @@ def atleast_jvpmaker(fun):
 defjvp(np.atleast_1d, atleast_jvpmaker(np.atleast_1d))
 defjvp(np.atleast_2d, atleast_jvpmaker(np.atleast_2d))
 defjvp(np.atleast_3d, atleast_jvpmaker(np.atleast_3d))
-
-
-def broadcast(x, target):
-    target_shape, target_ndim, target_dtype, target_iscomplex = metadata(target)
-    while np.ndim(x) < target_ndim:
-        x = np.expand_dims(x, 0)
-    for axis, size in enumerate(np.shape(x)):
-        if size == 1:
-            x = np.repeat(x, target_shape[axis], axis=axis)
-    return x
 
 
 defjvp(np.pad, lambda g, ans, array, width, mode, **kwargs: np.pad(g, width, mode))
