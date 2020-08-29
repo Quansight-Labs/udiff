@@ -20,6 +20,7 @@ dependencies:
   - doc8
   - black
   - matplotlib
+  - nbsphinx
   - pip:
     - pytest-mypy
     - pytest-black

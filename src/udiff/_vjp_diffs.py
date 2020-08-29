@@ -318,7 +318,7 @@ def grad_gradient(ans, x, *vargs, **kwargs):
             "The only optional argument currently supported for np.gradient " "is axis."
         )
     if axis is None:
-        axis = range(x.ndim)
+        axis = range(np.ndim(x))
     elif type(axis) is int:
         axis = [axis]
     else:
@@ -326,7 +326,7 @@ def grad_gradient(ans, x, *vargs, **kwargs):
 
     x_dtype = x.dtype
     x_shape = x.shape
-    nd = x.ndim
+    nd = np.ndim(x)
 
     def vjp(g):
         if np.ndim(g) == nd:
