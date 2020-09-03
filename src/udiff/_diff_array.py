@@ -171,7 +171,7 @@ class VJPDiffArray(DiffArray):
             if end_node not in self._jacobian:
                 self._jacobian[end_node] = {}
 
-            if position not in self._jacobian:
+            if position not in self._jacobian[end_node]:
                 self._jacobian[end_node][position] = grad_variables
             else:
                 self._jacobian[end_node][position] = (
@@ -213,7 +213,7 @@ class VJPDiffArray(DiffArray):
                 for position in itertools.product(*[range(i) for i in np.shape(self)]):
                     grad_variables = np.zeros_like(self.value)
                     grad_variables.value[position] = 1
-                    self._backward_jacobian(grad_variables, self, position, base=x)
+                    self._backward_jacobian(grad_variables, self, position, x)
 
             x._jacobian[self] = np.reshape(
                 np.stack(x._jacobian[self].values()), np.shape(self) + np.shape(x)
@@ -221,7 +221,7 @@ class VJPDiffArray(DiffArray):
             return x._jacobian[self]
         else:
             if x._diff is None or self not in x._diff:
-                self._backward(grad_variables, self, base=x)
+                self._backward(grad_variables, self, x)
             return x._diff[self]
 
 
@@ -335,27 +335,29 @@ class JVPDiffArray(DiffArray):
 
         if self._children:
             for cn, child in self._children:
-                child._forward(cn, grad_variables, end_node, base)
+                child._forward(grad_variables, end_node, base, cn=cn)
 
-    def _forward_jacobian(self, grad_variables, end_node, position, base):
-        if base is None or base.id == self.id:
+    def _forward_jacobian(self, grad_variables, end_node, position, base, cn=None):
+        if self._jvp:
+            grad_variables = self._jvp[cn](grad_variables)
+
+        if end_node is None or end_node.id == self.id:
             if self._jacobian is None:
                 self._jacobian = {}
 
             if base not in self._jacobian:
                 self._jacobian[base] = {}
 
-            if position not in self._jacobian:
+            if position not in self._jacobian[base]:
                 self._jacobian[base][position] = grad_variables
             else:
                 self._jacobian[base][position] = (
                     self._jacobian[base][position] + grad_variables
                 )
 
-        if self._jvp:
-            diffs = list(self._vjp(grad_variables))
-            for i, p in enumerate(self._parents):
-                p._backward_jacobian(diffs[i], end_node, position, base)
+        if self._children:
+            for cn, child in self._children:
+                child._forward_jacobian(grad_variables, end_node, position, base, cn=cn)
 
     def to(self, x, grad_variables=None, jacobian=False):
         """
@@ -382,11 +384,24 @@ class JVPDiffArray(DiffArray):
         ...    print(np.allclose(x1_diff, [5.5]))
         True
         """
-        print("Warning: JVP does not yet support higher order derivative")
+        print("Warning: JVP does not yet support higher order derivative.")
 
         with ua.set_backend(numpy_backend, coerce=True):
             if jacobian:
-                return
+                if self._jacobian is None or x not in self._jacobian:
+                    for position in itertools.product(
+                        *[range(i) for i in np.shape(x.value)]
+                    ):
+                        grad_variables = np.zeros_like(x.value)
+                        grad_variables[position] = 1
+                        x._forward_jacobian(grad_variables, self, position, x)
+
+                self._jacobian[x] = np.reshape(
+                    np.stack(self._jacobian[x].values()),
+                    np.shape(self.value) + np.shape(x.value),
+                )
+                return self._jacobian[x]
             else:
-                x._forward(grad_variables=grad_variables, base=x, end_node=self)
+                if self._diff is None or x not in self._diff:
+                    x._forward(grad_variables, self, x)
                 return self._diff[x]
