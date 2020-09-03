@@ -137,7 +137,7 @@ class VJPDiffArray(DiffArray):
         parent_argnums = tuple(range(len(self._parents)))
         self._vjp = vjpmaker(parent_argnums, self, tuple(vjp_args), kwargs)
 
-    def _backward(self, grad_variables=None, end_node=None, base=None):
+    def _backward(self, grad_variables, end_node, base):
         """
         Backpropagation.
         Traverse computation graph backwards in topological order from the end node.
@@ -221,7 +221,7 @@ class VJPDiffArray(DiffArray):
             return x._jacobian[self]
         else:
             if x._diff is None or self not in x._diff:
-                self._backward(grad_variables, base=x)
+                self._backward(grad_variables, self, base=x)
             return x._diff[self]
 
 
@@ -252,6 +252,8 @@ class JVPDiffArray(DiffArray):
             self._id = arr.id
             self._diff = arr._diff
             self._jacobian = arr._jacobian
+            self._jvp = arr._jvp
+            self._children = arr._children
             return
 
         with ua.determine_backend(arr, np.ndarray, domain="numpy", coerce=True):
@@ -260,7 +262,9 @@ class JVPDiffArray(DiffArray):
         self._value = arr
         self._id = uuid.uuid4()
         self._diff = {}
+        self._jvp = None
         self._jacobian = None
+        self._children = None
 
     def register_diff(self, func, args, kwargs):
         """
@@ -284,29 +288,74 @@ class JVPDiffArray(DiffArray):
             except KeyError:
                 raise NotImplementedError("JVP of func not defined")
 
-            parents, jvp_args, start_nodes = [], [], []
+            jvp_args, parent_argnums = [], []
+            cn = 0
 
             for arg in args:
                 if isinstance(arg, JVPDiffArray):
-                    parents.append(arg)
                     jvp_args.append(arg.value)
 
-                    if not arg._diff:
-                        arg._diff[arg] = np.ones_like(arg.value)
+                    if arg._children is None:
+                        arg._children = []
 
-                    start_nodes += list(arg._diff.keys())
+                    arg._children.append((cn, self))
+                    parent_argnums.append(cn)
+                    cn += 1
 
                 elif not isinstance(arg, np.ufunc):
                     jvp_args.append(arg)
 
-            parent_argnums = tuple(range(len(parents)))
+            self._jvp = list(
+                jvpmaker(parent_argnums, self.value, tuple(jvp_args), kwargs)
+            )
 
-            for sn in set(start_nodes):
-                parent_jvps = [p._diff.get(sn, np.zeros_like(p.value)) for p in parents]
+    def _forward(self, grad_variables, end_node, base, cn=None):
+        """
+        Backpropagation.
+        Traverse computation graph backwards in topological order from the end node.
+        For each node, compute local gradient contribution and accumulate.
+        """
+        if grad_variables is None:
+            grad_variables = np.ones_like(self.value)
 
-                self._diff[sn] = jvpmaker(
-                    parent_argnums, parent_jvps, self.value, tuple(jvp_args), kwargs
+        if end_node is None:
+            end_node = self
+
+        if self._jvp:
+            grad_variables = self._jvp[cn](grad_variables)
+
+        if end_node is None or end_node.id == self.id:
+            if self._diff is None:
+                self._diff = {}
+
+            if base in self._diff:
+                self._diff[base] = self._diff[base] + grad_variables
+            else:
+                self._diff[base] = grad_variables
+
+        if self._children:
+            for cn, child in self._children:
+                child._forward(cn, grad_variables, end_node, base)
+
+    def _forward_jacobian(self, grad_variables, end_node, position, base):
+        if base is None or base.id == self.id:
+            if self._jacobian is None:
+                self._jacobian = {}
+
+            if base not in self._jacobian:
+                self._jacobian[base] = {}
+
+            if position not in self._jacobian:
+                self._jacobian[base][position] = grad_variables
+            else:
+                self._jacobian[base][position] = (
+                    self._jacobian[base][position] + grad_variables
                 )
+
+        if self._jvp:
+            diffs = list(self._vjp(grad_variables))
+            for i, p in enumerate(self._parents):
+                p._backward_jacobian(diffs[i], end_node, position, base)
 
     def to(self, x, grad_variables=None, jacobian=False):
         """
@@ -333,9 +382,11 @@ class JVPDiffArray(DiffArray):
         ...    print(np.allclose(x1_diff, [5.5]))
         True
         """
-        if jacobian:
-            raise NotImplementedError(
-                "JVP does not yet support jacobian and higher order derivative"
-            )
-        else:
-            return self._diff[x]
+        print("Warning: JVP does not yet support higher order derivative")
+
+        with ua.set_backend(numpy_backend, coerce=True):
+            if jacobian:
+                return
+            else:
+                x._forward(grad_variables=grad_variables, base=x, end_node=self)
+                return self._diff[x]
