@@ -305,4 +305,3 @@ defjvp(np.atleast_3d, atleast_jvpmaker(np.atleast_3d))
 defjvp(
     np.pad, lambda ans, array, width, mode, **kwargs: lambda g: np.pad(g, width, mode)
 )
-

@@ -363,6 +363,8 @@ class JVPDiffArray(DiffArray):
         """
         Calculate the JVP or Jacobian matrix of self to x.
 
+        .. note::  JVP does not yet support higher order derivative.
+
         Parameters
         ----------
         x : JVPDiffArray
@@ -384,7 +386,6 @@ class JVPDiffArray(DiffArray):
         ...    print(np.allclose(x1_diff, [5.5]))
         True
         """
-        print("Warning: JVP does not yet support higher order derivative.")
 
         with ua.set_backend(numpy_backend, coerce=True):
             if jacobian:
@@ -396,9 +397,14 @@ class JVPDiffArray(DiffArray):
                         grad_variables[position] = 1
                         x._forward_jacobian(grad_variables, self, position, x)
 
-                self._jacobian[x] = np.reshape(
-                    np.stack(self._jacobian[x].values()),
-                    np.shape(self.value) + np.shape(x.value),
+                old_axes = tuple(range(self.value.ndim + x.value.ndim))
+                new_axes = old_axes[x.value.ndim :] + old_axes[: x.value.ndim]
+                self._jacobian[x] = np.transpose(
+                    np.reshape(
+                        np.stack(self._jacobian[x].values()),
+                        np.shape(x.value) + np.shape(self.value),
+                    ),
+                    new_axes,
                 )
                 return self._jacobian[x]
             else:
