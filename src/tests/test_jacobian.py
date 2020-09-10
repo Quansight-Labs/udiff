@@ -116,10 +116,7 @@ def test_jacobian(backend, mode, x, func, expect_jacobian):
     if isinstance(y, da.Array):
         y.compute()
 
-    if mode == "vjp":
-        assert_allclose(x_jacobian.value, expect_jacobian)
-    elif mode == "jvp":
-        assert_allclose(x_jacobian, expect_jacobian)
+    assert_allclose(x_jacobian.value, expect_jacobian)
 
 
 @pytest.mark.parametrize(
@@ -153,9 +150,5 @@ def test_separation_binary(
     if isinstance(y, da.Array):
         y.compute()
 
-    if mode == "vjp":
-        assert_allclose(u_jacobian.value, expect_u_jacobian)
-        assert_allclose(v_jacobian.value, expect_v_jacobian)
-    elif mode == "jvp":
-        assert_allclose(u_jacobian, expect_u_jacobian)
-        assert_allclose(v_jacobian, expect_v_jacobian)
+    assert_allclose(u_jacobian.value, expect_u_jacobian)
+    assert_allclose(v_jacobian.value, expect_v_jacobian)

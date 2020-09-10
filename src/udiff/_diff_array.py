@@ -2,6 +2,7 @@ import uuid
 import uarray as ua
 import unumpy as np
 import itertools
+from functools import reduce
 from ._core import primitive_vjps, primitive_jvps
 from unumpy import numpy_backend
 
@@ -17,7 +18,7 @@ class DiffArray(np.ndarray):
 
 
     .. note:: DiffArray is the base class of JVPDiffArray and VJPDiffArray. Do not use it.
-    
+
     """
 
     def __init__(self, arr):
@@ -73,8 +74,8 @@ class VJPDiffArray(DiffArray):
 
     Examples
     --------
-    You do not need to use VJPDiffArray explicitly. 
-    When you call a function such as ``np.array`` that could create a ndarray under vjp mode, 
+    You do not need to use VJPDiffArray explicitly.
+    When you call a function such as ``np.array`` that could create a ndarray under vjp mode,
     VJPDiffArray will be created automatically.
 
     >>> with ua.set_backend(udiff.DiffArrayBackend(numpy_backend), coerce=True):
@@ -98,7 +99,7 @@ class VJPDiffArray(DiffArray):
 
         self._value = arr
         self._id = uuid.uuid4()
-        self._parents = []
+        self._parents = None
         self._vjp = None
         self._diff = None
         self._jacobian = None
@@ -111,7 +112,7 @@ class VJPDiffArray(DiffArray):
         ----------
         func : np.ufunc
             The function need to be derived.
-        args : 
+        args :
             Arguments used in func.
         kwargs :
             Keyword-only arguments used in func.
@@ -126,6 +127,9 @@ class VJPDiffArray(DiffArray):
             raise NotImplementedError("VJP of func not defined")
 
         vjp_args = []
+
+        if self._parents is None:
+            self._parents = []
 
         for arg in args:
             if isinstance(arg, VJPDiffArray):
@@ -236,8 +240,8 @@ class JVPDiffArray(DiffArray):
 
     Examples
     --------
-    You do not need to use JVPDiffArray explicitly. 
-    When you call a function such as ``np.array`` that could create a ndarray under jvp mode, 
+    You do not need to use JVPDiffArray explicitly.
+    When you call a function such as ``np.array`` that could create a ndarray under jvp mode,
     JVPDiffArray will be created automatically.
 
     >>> with ua.set_backend(udiff.DiffArrayBackend(numpy_backend, mode="jvp"), coerce=True):
@@ -253,7 +257,7 @@ class JVPDiffArray(DiffArray):
             self._diff = arr._diff
             self._jacobian = arr._jacobian
             self._jvp = arr._jvp
-            self._children = arr._children
+            self._vars = arr._vars
             return
 
         with ua.determine_backend(arr, np.ndarray, domain="numpy", coerce=True):
@@ -261,10 +265,10 @@ class JVPDiffArray(DiffArray):
 
         self._value = arr
         self._id = uuid.uuid4()
-        self._diff = {}
+        self._diff = None
         self._jvp = None
         self._jacobian = None
-        self._children = None
+        self._vars = None
 
     def register_diff(self, func, args, kwargs):
         """
@@ -274,90 +278,61 @@ class JVPDiffArray(DiffArray):
         ----------
         func : np.ufunc
             The function need to be derived.
-        args : 
+        args :
             Arguments used in func.
         kwargs :
             Keyword-only arguments used in func.
         """
-        with ua.set_backend(numpy_backend, coerce=True):
-            try:
-                if func is np.ufunc.__call__:
-                    jvpmaker = primitive_jvps[args[0]]
-                else:
-                    jvpmaker = primitive_jvps[func]
-            except KeyError:
-                raise NotImplementedError("JVP of func not defined")
-
-            jvp_args, parent_argnums = [], []
-            cn = 0
-
-            for arg in args:
-                if isinstance(arg, JVPDiffArray):
-                    jvp_args.append(arg.value)
-
-                    if arg._children is None:
-                        arg._children = []
-
-                    arg._children.append((cn, self))
-                    parent_argnums.append(cn)
-                    cn += 1
-
-                elif not isinstance(arg, np.ufunc):
-                    jvp_args.append(arg)
-
-            self._jvp = list(
-                jvpmaker(parent_argnums, self.value, tuple(jvp_args), kwargs)
-            )
-
-    def _forward(self, grad_variables, end_node, base, cn=None):
-        """
-        Backpropagation.
-        Traverse computation graph backwards in topological order from the end node.
-        For each node, compute local gradient contribution and accumulate.
-        """
-        if grad_variables is None:
-            grad_variables = np.ones_like(self.value)
-
-        if end_node is None:
-            end_node = self
-
-        if self._jvp:
-            grad_variables = self._jvp[cn](grad_variables)
-
-        if end_node is None or end_node.id == self.id:
-            if self._diff is None:
-                self._diff = {}
-
-            if base in self._diff:
-                self._diff[base] = self._diff[base] + grad_variables
+        try:
+            if func is np.ufunc.__call__:
+                jvpmaker = primitive_jvps[args[0]]
             else:
-                self._diff[base] = grad_variables
+                jvpmaker = primitive_jvps[func]
+        except KeyError:
+            raise NotImplementedError("JVP of func not defined")
 
-        if self._children:
-            for cn, child in self._children:
-                child._forward(grad_variables, end_node, base, cn=cn)
+        jvp_args, parents = [], []
 
-    def _forward_jacobian(self, grad_variables, end_node, position, base, cn=None):
-        if self._jvp:
-            grad_variables = self._jvp[cn](grad_variables)
+        for arg in args:
+            if isinstance(arg, JVPDiffArray):
+                jvp_args.append(arg)
 
-        if end_node is None or end_node.id == self.id:
-            if self._jacobian is None:
-                self._jacobian = {}
+                parents.append(arg)
 
-            if base not in self._jacobian:
-                self._jacobian[base] = {}
+            elif not isinstance(arg, np.ufunc):
+                jvp_args.append(arg)
 
-            if position not in self._jacobian[base]:
-                self._jacobian[base][position] = grad_variables
+        parent_argnums = tuple(range(len(parents)))
+
+        jvps = list(jvpmaker(parent_argnums, self, tuple(jvp_args), kwargs))
+
+        if self._jvp is None:
+            self._jvp = {}
+
+        for p, jvp in zip(parents, jvps):
+            if p not in self._jvp:
+                self._jvp[p] = [[jvp]]
             else:
-                self._jacobian[base][position] = (
-                    self._jacobian[base][position] + grad_variables
-                )
+                self._jvp[p] += [[jvp]]
+            if p._jvp:
+                for base in p._jvp:
+                    if base not in self._jvp:
+                        self._jvp[base] = []
+                    self._jvp[base] += [flist + [jvp] for flist in p._jvp[base]]
 
-        if self._children:
-            for cn, child in self._children:
-                child._forward_jacobian(grad_variables, end_node, position, base, cn=cn)
+    def _forward(self, x, grad_variables):
+        if self._jvp is None:
+            return grad_variables
+
+        result = []
+
+        for flist in self._jvp[x]:
+            cur_result = grad_variables
+            for f in flist:
+                cur_result = f(cur_result)
+            result.append(cur_result)
+
+        return reduce(lambda x, y: x + y, result)
 
     def to(self, x, grad_variables=None, jacobian=False):
         """
@@ -372,7 +347,7 @@ class JVPDiffArray(DiffArray):
         grad_variables : JVPDiffArray
             Gradient assigned to the x.
         jacobian : bool
-            Flag identifies whether to calculate the jacobian logo. 
+            Flag identifies whether to calculate the jacobian logo.
             If set ``True``, it will return jacobian matrix instead of jvp.
 
         Examples
@@ -386,28 +361,37 @@ class JVPDiffArray(DiffArray):
         ...    print(np.allclose(x1_diff, [5.5]))
         True
         """
+        if self._jvp and x not in self._jvp:
+            raise ValueError("Please check if the base is correct.")
 
-        with ua.set_backend(numpy_backend, coerce=True):
-            if jacobian:
-                if self._jacobian is None or x not in self._jacobian:
-                    for position in itertools.product(
-                        *[range(i) for i in np.shape(x.value)]
-                    ):
-                        grad_variables = np.zeros_like(x.value)
-                        grad_variables[position] = 1
-                        x._forward_jacobian(grad_variables, self, position, x)
+        if jacobian:
+            if self._jacobian is None:
+                self._jacobian = {}
 
-                old_axes = tuple(range(self.value.ndim + x.value.ndim))
-                new_axes = old_axes[x.value.ndim :] + old_axes[: x.value.ndim]
-                self._jacobian[x] = np.transpose(
-                    np.reshape(
-                        np.stack(self._jacobian[x].values()),
-                        np.shape(x.value) + np.shape(self.value),
-                    ),
-                    new_axes,
-                )
-                return self._jacobian[x]
-            else:
-                if self._diff is None or x not in self._diff:
-                    x._forward(grad_variables, self, x)
-                return self._diff[x]
+            if x not in self._jacobian:
+                self._jacobian[x] = {}
+                for position in itertools.product(*[range(i) for i in np.shape(x)]):
+                    grad_variables = np.zeros_like(x)
+                    grad_variables.value[position] = 1
+                    self._jacobian[x][position] = self._forward(x, grad_variables)
+
+            old_axes = tuple(range(np.ndim(self) + np.ndim(x)))
+            new_axes = old_axes[np.ndim(x) :] + old_axes[: np.ndim(x)]
+            self._jacobian[x] = np.transpose(
+                np.reshape(
+                    np.stack(self._jacobian[x].values()), np.shape(x) + np.shape(self),
+                ),
+                new_axes,
+            )
+            return self._jacobian[x]
+        else:
+            if self._diff is None:
+                self._diff = {}
+
+            if x not in self._diff:
+                if grad_variables is None:
+                    grad_variables = np.ones_like(self)
+
+                self._diff[x] = self._forward(x, grad_variables)
+
+            return self._diff[x]

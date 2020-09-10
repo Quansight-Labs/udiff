@@ -305,3 +305,18 @@ defjvp(np.atleast_3d, atleast_jvpmaker(np.atleast_3d))
 defjvp(
     np.pad, lambda ans, array, width, mode, **kwargs: lambda g: np.pad(g, width, mode)
 )
+
+
+def stack_diff(ans, x, axis=0):
+    def jvp(g):
+        ret = []
+        ng = np.broadcast_to(g, np.shape(ans))
+        shape = np.shape(ng)
+        for idx in range(shape[axis]):
+            ret.append(np.take(ng, idx, axis=axis))
+        return tuple(ret)
+
+    return jvp
+
+
+defjvp(np.stack, stack_diff)

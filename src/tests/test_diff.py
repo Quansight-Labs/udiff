@@ -165,10 +165,7 @@ def test_unary_function(backend, mode, func, y_d, domain):
     if isinstance(y, da.Array):
         y.compute()
 
-    if mode == "vjp":
-        assert_allclose(x_diff.value, expect_diff)
-    elif mode == "jvp":
-        assert_allclose(x_diff, expect_diff)
+    assert_allclose(x_diff.value, expect_diff)
 
 
 @pytest.mark.parametrize(
@@ -268,12 +265,8 @@ def test_binary_function(backend, mode, func, u_d, v_d, u_domain, v_domain):
     if isinstance(y, da.Array):
         y.compute()
 
-    if mode == "vjp":
-        assert_allclose(u_diff.value, expect_u_diff)
-        assert_allclose(v_diff.value, expect_v_diff)
-    elif mode == "jvp":
-        assert_allclose(u_diff, expect_u_diff)
-        assert_allclose(v_diff, expect_v_diff)
+    assert_allclose(u_diff.value, expect_u_diff)
+    assert_allclose(v_diff.value, expect_v_diff)
 
 
 @pytest.mark.parametrize(
@@ -326,13 +319,9 @@ def test_arbitrary_function(backend, mode, func, y_d, domain):
     if isinstance(y, da.Array):
         y.compute()
 
-    if mode == "vjp":
-        assert_allclose(x_diff.value, expect_diff)
-    elif mode == "jvp":
-        assert_allclose(x_diff, expect_diff)
+    assert_allclose(x_diff.value, expect_diff)
 
 
-# @pytest.mark.skip
 @pytest.mark.parametrize(
     "func, y_d, domain",
     [
@@ -361,14 +350,14 @@ def test_arbitrary_function(backend, mode, func, y_d, domain):
         ),
     ],
 )
-def test_high_order_diff(backend, func, y_d, domain):
+def test_high_order_diff(backend, mode, func, y_d, domain):
     if domain is None:
         x_arr = generate_test_data()
     else:
         x_arr = generate_test_data(a=domain[0], b=domain[1])
     expect_diff = [y_d(xa) for xa in x_arr]
     try:
-        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend, mode=mode), coerce=True):
             x = np.asarray(x_arr)
             y = func(x)
             x_diff = y.to(x).to(x)
