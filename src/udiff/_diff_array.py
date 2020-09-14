@@ -2,6 +2,7 @@ import uuid
 import uarray as ua
 import unumpy as np
 import itertools
+from functools import reduce
 from ._core import primitive_vjps, primitive_jvps
 from unumpy import numpy_backend
 
@@ -17,7 +18,7 @@ class DiffArray(np.ndarray):
 
 
     .. note:: DiffArray is the base class of JVPDiffArray and VJPDiffArray. Do not use it.
-    
+
     """
 
     def __init__(self, arr):
@@ -73,8 +74,8 @@ class VJPDiffArray(DiffArray):
 
     Examples
     --------
-    You do not need to use VJPDiffArray explicitly. 
-    When you call a function such as ``np.array`` that could create a ndarray under vjp mode, 
+    You do not need to use VJPDiffArray explicitly.
+    When you call a function such as ``np.array`` that could create a ndarray under vjp mode,
     VJPDiffArray will be created automatically.
 
     >>> with ua.set_backend(udiff.DiffArrayBackend(numpy_backend), coerce=True):
@@ -98,7 +99,7 @@ class VJPDiffArray(DiffArray):
 
         self._value = arr
         self._id = uuid.uuid4()
-        self._parents = []
+        self._parents = None
         self._vjp = None
         self._diff = None
         self._jacobian = None
@@ -111,7 +112,7 @@ class VJPDiffArray(DiffArray):
         ----------
         func : np.ufunc
             The function need to be derived.
-        args : 
+        args :
             Arguments used in func.
         kwargs :
             Keyword-only arguments used in func.
@@ -127,6 +128,9 @@ class VJPDiffArray(DiffArray):
 
         vjp_args = []
 
+        if self._parents is None:
+            self._parents = []
+
         for arg in args:
             if isinstance(arg, VJPDiffArray):
                 self._parents.append(arg)
@@ -137,7 +141,7 @@ class VJPDiffArray(DiffArray):
         parent_argnums = tuple(range(len(self._parents)))
         self._vjp = vjpmaker(parent_argnums, self, tuple(vjp_args), kwargs)
 
-    def _backward(self, grad_variables=None, end_node=None, base=None):
+    def _backward(self, grad_variables, end_node, base):
         """
         Backpropagation.
         Traverse computation graph backwards in topological order from the end node.
@@ -171,7 +175,7 @@ class VJPDiffArray(DiffArray):
             if end_node not in self._jacobian:
                 self._jacobian[end_node] = {}
 
-            if position not in self._jacobian:
+            if position not in self._jacobian[end_node]:
                 self._jacobian[end_node][position] = grad_variables
             else:
                 self._jacobian[end_node][position] = (
@@ -213,7 +217,7 @@ class VJPDiffArray(DiffArray):
                 for position in itertools.product(*[range(i) for i in np.shape(self)]):
                     grad_variables = np.zeros_like(self.value)
                     grad_variables.value[position] = 1
-                    self._backward_jacobian(grad_variables, self, position, base=x)
+                    self._backward_jacobian(grad_variables, self, position, x)
 
             x._jacobian[self] = np.reshape(
                 np.stack(x._jacobian[self].values()), np.shape(self) + np.shape(x)
@@ -221,7 +225,7 @@ class VJPDiffArray(DiffArray):
             return x._jacobian[self]
         else:
             if x._diff is None or self not in x._diff:
-                self._backward(grad_variables, base=x)
+                self._backward(grad_variables, self, x)
             return x._diff[self]
 
 
@@ -236,8 +240,8 @@ class JVPDiffArray(DiffArray):
 
     Examples
     --------
-    You do not need to use JVPDiffArray explicitly. 
-    When you call a function such as ``np.array`` that could create a ndarray under jvp mode, 
+    You do not need to use JVPDiffArray explicitly.
+    When you call a function such as ``np.array`` that could create a ndarray under jvp mode,
     JVPDiffArray will be created automatically.
 
     >>> with ua.set_backend(udiff.DiffArrayBackend(numpy_backend, mode="jvp"), coerce=True):
@@ -252,6 +256,8 @@ class JVPDiffArray(DiffArray):
             self._id = arr.id
             self._diff = arr._diff
             self._jacobian = arr._jacobian
+            self._jvp = arr._jvp
+            self._vars = arr._vars
             return
 
         with ua.determine_backend(arr, np.ndarray, domain="numpy", coerce=True):
@@ -259,8 +265,10 @@ class JVPDiffArray(DiffArray):
 
         self._value = arr
         self._id = uuid.uuid4()
-        self._diff = {}
+        self._diff = None
+        self._jvp = None
         self._jacobian = None
+        self._vars = None
 
     def register_diff(self, func, args, kwargs):
         """
@@ -270,47 +278,67 @@ class JVPDiffArray(DiffArray):
         ----------
         func : np.ufunc
             The function need to be derived.
-        args : 
+        args :
             Arguments used in func.
         kwargs :
             Keyword-only arguments used in func.
         """
-        with ua.set_backend(numpy_backend, coerce=True):
-            try:
-                if func is np.ufunc.__call__:
-                    jvpmaker = primitive_jvps[args[0]]
-                else:
-                    jvpmaker = primitive_jvps[func]
-            except KeyError:
-                raise NotImplementedError("JVP of func not defined")
+        try:
+            if func is np.ufunc.__call__:
+                jvpmaker = primitive_jvps[args[0]]
+            else:
+                jvpmaker = primitive_jvps[func]
+        except KeyError:
+            raise NotImplementedError("JVP of func not defined")
 
-            parents, jvp_args, start_nodes = [], [], []
+        jvp_args, parents = [], []
 
-            for arg in args:
-                if isinstance(arg, JVPDiffArray):
-                    parents.append(arg)
-                    jvp_args.append(arg.value)
+        for arg in args:
+            if isinstance(arg, JVPDiffArray):
+                jvp_args.append(arg)
 
-                    if not arg._diff:
-                        arg._diff[arg] = np.ones_like(arg.value)
+                parents.append(arg)
 
-                    start_nodes += list(arg._diff.keys())
+            elif not isinstance(arg, np.ufunc):
+                jvp_args.append(arg)
 
-                elif not isinstance(arg, np.ufunc):
-                    jvp_args.append(arg)
+        parent_argnums = tuple(range(len(parents)))
 
-            parent_argnums = tuple(range(len(parents)))
+        jvps = list(jvpmaker(parent_argnums, self, tuple(jvp_args), kwargs))
 
-            for sn in set(start_nodes):
-                parent_jvps = [p._diff.get(sn, np.zeros_like(p.value)) for p in parents]
+        if self._jvp is None:
+            self._jvp = {}
 
-                self._diff[sn] = jvpmaker(
-                    parent_argnums, parent_jvps, self.value, tuple(jvp_args), kwargs
-                )
+        for p, jvp in zip(parents, jvps):
+            if p not in self._jvp:
+                self._jvp[p] = [[jvp]]
+            else:
+                self._jvp[p] += [[jvp]]
+            if p._jvp:
+                for base in p._jvp:
+                    if base not in self._jvp:
+                        self._jvp[base] = []
+                    self._jvp[base] += [flist + [jvp] for flist in p._jvp[base]]
+
+    def _forward(self, x, grad_variables):
+        if self._jvp is None:
+            return grad_variables
+
+        result = []
+
+        for flist in self._jvp[x]:
+            cur_result = grad_variables
+            for f in flist:
+                cur_result = f(cur_result)
+            result.append(cur_result)
+
+        return reduce(lambda x, y: x + y, result)
 
     def to(self, x, grad_variables=None, jacobian=False):
         """
         Calculate the JVP or Jacobian matrix of self to x.
+
+        .. note::  JVP does not yet support higher order derivative.
 
         Parameters
         ----------
@@ -319,7 +347,7 @@ class JVPDiffArray(DiffArray):
         grad_variables : JVPDiffArray
             Gradient assigned to the x.
         jacobian : bool
-            Flag identifies whether to calculate the jacobian logo. 
+            Flag identifies whether to calculate the jacobian logo.
             If set ``True``, it will return jacobian matrix instead of jvp.
 
         Examples
@@ -333,9 +361,37 @@ class JVPDiffArray(DiffArray):
         ...    print(np.allclose(x1_diff, [5.5]))
         True
         """
+        if self._jvp and x not in self._jvp:
+            raise ValueError("Please check if the base is correct.")
+
         if jacobian:
-            raise NotImplementedError(
-                "JVP does not yet support jacobian and higher order derivative"
+            if self._jacobian is None:
+                self._jacobian = {}
+
+            if x not in self._jacobian:
+                self._jacobian[x] = {}
+                for position in itertools.product(*[range(i) for i in np.shape(x)]):
+                    grad_variables = np.zeros_like(x)
+                    grad_variables.value[position] = 1
+                    self._jacobian[x][position] = self._forward(x, grad_variables)
+
+            old_axes = tuple(range(np.ndim(self) + np.ndim(x)))
+            new_axes = old_axes[np.ndim(x) :] + old_axes[: np.ndim(x)]
+            self._jacobian[x] = np.transpose(
+                np.reshape(
+                    np.stack(self._jacobian[x].values()), np.shape(x) + np.shape(self),
+                ),
+                new_axes,
             )
+            return self._jacobian[x]
         else:
+            if self._diff is None:
+                self._diff = {}
+
+            if x not in self._diff:
+                if grad_variables is None:
+                    grad_variables = np.ones_like(self)
+
+                self._diff[x] = self._forward(x, grad_variables)
+
             return self._diff[x]

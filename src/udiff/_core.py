@@ -79,19 +79,13 @@ def subval(x, i, v):
     return tuple(x_)
 
 
-def sum_outgrads(gs):
-    return reduce(np.add, gs)
-
-
 def defjvp_argnums(fun, jvpmaker):
     primitive_jvps[fun] = jvpmaker
 
 
 def defjvp_argnum(fun, jvpmaker):
-    def jvp_argnums(argnums, gs, ans, args, kwargs):
-        return sum_outgrads(
-            jvpmaker(argnum, g, ans, args, kwargs) for argnum, g in zip(argnums, gs)
-        )
+    def jvp_argnums(argnums, ans, args, kwargs):
+        return (jvpmaker(argnum, ans, args, kwargs) for argnum in argnums)
 
     defjvp_argnums(fun, jvp_argnums)
 
@@ -111,8 +105,8 @@ def defjvp(fun, *jvpfuns, **kwargs):
     --------
     >>> defjvp(
     ...     np.arctan2,
-    ...     lambda g, ans, x, y: g * y / (x ** 2 + y ** 2),
-    ...     lambda g, ans, x, y: g * -x / (x ** 2 + y ** 2),
+    ...     lambda ans, x, y: lambda g: g * y / (x ** 2 + y ** 2),
+    ...     lambda ans, x, y: lambda g: g * -x / (x ** 2 + y ** 2),
     ... )
 
     """
@@ -122,19 +116,19 @@ def defjvp(fun, *jvpfuns, **kwargs):
         for argnum, jvpfun in zip(argnums, jvpfuns)
     }
 
-    def jvp_argnums(argnums, gs, ans, args, kwargs):
-        return sum_outgrads(
-            jvps_dict[argnum](g, ans, *args, **kwargs) for argnum, g in zip(argnums, gs)
-        )
+    def jvp_argnums(argnums, ans, args, kwargs):
+        return [jvps_dict[argnum](ans, *args, **kwargs) for argnum in argnums]
 
     defjvp_argnums(fun, jvp_argnums)
 
 
 def translate_jvp(jvpfun, fun, argnum):
     if jvpfun is None:
-        return lambda g, ans, *a, **k: np.zeros_like(ans)
+        return lambda ans, *a, **k: lambda g: np.zeros_like(ans)
     elif jvpfun == "same":
-        return lambda g, ans, *args, **kwargs: fun(*subval(args, argnum, g), **kwargs)
+        return lambda ans, *args, **kwargs: lambda g: fun(
+            *subval(args, argnum, g), **kwargs
+        )
     elif callable(jvpfun):
         return jvpfun
     else:
@@ -157,5 +151,7 @@ def def_linear(fun):
     """
     defjvp_argnum(
         fun,
-        lambda argnum, g, ans, args, kwargs: fun(*subval(args, argnum, g), **kwargs),
+        lambda argnum, ans, args, kwargs: lambda g: fun(
+            *subval(args, argnum, g), **kwargs
+        ),
     )

@@ -69,6 +69,12 @@ def backend(request):
     return backend
 
 
+@pytest.fixture(scope="session", params=["vjp", "jvp"])
+def mode(request):
+    mode = request.param
+    return mode
+
+
 @pytest.mark.parametrize(
     "x, func, expect_jacobian",
     [
@@ -96,9 +102,9 @@ def backend(request):
         ),
     ],
 )
-def test_jacobian(backend, x, func, expect_jacobian):
+def test_jacobian(backend, mode, x, func, expect_jacobian):
     try:
-        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend, mode=mode), coerce=True):
             x = np.asarray(x)
             y = func(x)
             x_jacobian = y.to(x, jacobian=True)
@@ -125,9 +131,11 @@ def test_jacobian(backend, x, func, expect_jacobian):
         ),
     ],
 )
-def test_separation_binary(backend, u, v, func, expect_u_jacobian, expect_v_jacobian):
+def test_separation_binary(
+    backend, mode, u, v, func, expect_u_jacobian, expect_v_jacobian
+):
     try:
-        with ua.set_backend(udiff.DiffArrayBackend(backend), coerce=True):
+        with ua.set_backend(udiff.DiffArrayBackend(backend, mode=mode), coerce=True):
             u = np.asarray(u)
             v = np.asarray(v)
 
