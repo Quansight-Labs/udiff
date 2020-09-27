@@ -272,7 +272,7 @@ class JVPDiffArray(DiffArray):
 
     def register_diff(self, func, args, kwargs):
         """
-        Calculate the derivative of the current node to the previous node.
+        Register all the information used in forward propagation for the current node.
 
         Parameters
         ----------
@@ -337,8 +337,6 @@ class JVPDiffArray(DiffArray):
     def to(self, x, grad_variables=None, jacobian=False):
         """
         Calculate the JVP or Jacobian matrix of self to x.
-
-        .. note::  JVP does not yet support higher order derivative.
 
         Parameters
         ----------
