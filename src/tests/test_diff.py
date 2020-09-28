@@ -335,7 +335,11 @@ def test_arbitrary_function(backend, mode, func, y_d, domain):
             - 2 * sin(x) ** 2,
             (0, pi),
         ),
-        (lambda x: np.log(x ** 2), lambda x: -2 / x ** 2, (1, None),),
+        (
+            lambda x: np.log(x ** 2),
+            lambda x: -2 / x ** 2,
+            (1, None),
+        ),
         (
             lambda x: np.power(np.cos(x), 2) * np.log(x),
             lambda x: -2 * cos(2 * x) * log(x)

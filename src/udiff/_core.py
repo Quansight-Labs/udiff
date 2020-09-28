@@ -31,8 +31,8 @@ def defvjp(fun, *vjpmakers, **kwargs):
     ----------
     fun : np.ufunc
         The function need to be derived.
-    *jvpfuns : 
-        Functions for calculating derivative. 
+    *jvpfuns :
+        Functions for calculating derivative.
 
     Examples
     --------
@@ -98,8 +98,8 @@ def defjvp(fun, *jvpfuns, **kwargs):
     ----------
     fun : np.ufunc
         The function need to be derived.
-    *jvpfuns : 
-        Functions for calculating derivative. 
+    *jvpfuns :
+        Functions for calculating derivative.
 
     Examples
     --------
