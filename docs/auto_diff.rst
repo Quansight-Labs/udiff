@@ -168,12 +168,12 @@ each node in the calculation graph. Assuming this data structure is
 * ``_parents``: The nodes that point to the current node, for example, the
   ``_parents`` of ``v4`` is ``[v2, v3]``.
 
-* ``vjp``: A function that calculates the gradient of the current node to its
+* ``_vjp``: A function that calculates the gradient of the current node to its
   parents. The function inputs ``ans``, ``x``, and ``y`` during forward
-  propagation. Then you just need input ``g`` during backward propagation.
+  calculation. Then you just need input ``g`` during backward propagation.
 
 All these attributes are assigned by a function called ``register_diff`` during
-forward propagation.
+forward calculation.
 
 Backward propagation
 ------------------------------------
@@ -186,4 +186,39 @@ graph:
 
 For each node, we input the gradient of the previous node to current node to
 obtain the gradient of the current node to ``_parents``. This process is
-implemented by the `backward` function.
+implemented by the ``_backward`` function.
+
+How to implement ``JVP``?
+================================
+
+``VJP`` is derived from back to front, while ``JVP`` is derived from front to back.
+The problems is that it is difficult to implement high-order derivation
+in a concise way, because we will also register gradient when we calculate
+the derivative, and ``JVP``'s front-to-back computer system will make the program
+fall into an infinite loop.
+
+In order to solve this problem, we need to make each ``JVPDiffArray`` self-complete,
+that is, it needs to carry all the information needed for its own derivation.
+
+Thus, when calculating the gradient,
+it is enough to calculate the stored jvp functions chain
+because ``JVPDiffArray`` itself already contains all the required information.
+
+How to implement ``Jacobian``?
+================================
+
+After completing the above two parts,
+we can easily obtain the jacobian matrix based on them.
+``VJP`` is the derivative of ``np.sum(y*v)`` (``v`` is the grad variables) to ``x``,
+and the part of the jacobian matrix ``j[i][j]``
+(representing the derivative of ``y[i][j]`` to ``x``)
+can be regarded as setting the ``v`` in ``VJP`` as a matrix
+whose position [i,j] is 1 and all other positions are 0.
+
+How to support higher-order derivative?
+========================================
+Because we also register the gradient (call ``register_diff``) during
+the calculation of gradient, obtaining higher-order differentials
+only needs to call the ``to`` function repeatedly.
+
+For more details, please refer to `_diff_array.py <https://github.com/Quansight-Labs/udiff/blob/master/src/udiff/_diff_array.py>`_.

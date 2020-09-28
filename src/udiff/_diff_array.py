@@ -56,7 +56,9 @@ class DiffArray(np.ndarray):
 
     def __str__(self):
         return "<{}, id={}, value=\n{}\n>".format(
-            type(self).__name__, repr(self.id), str(self.value),
+            type(self).__name__,
+            repr(self.id),
+            str(self.value),
         )
 
     __repr__ = __str__
@@ -272,7 +274,7 @@ class JVPDiffArray(DiffArray):
 
     def register_diff(self, func, args, kwargs):
         """
-        Calculate the derivative of the current node to the previous node.
+        Register all the information used in forward propagation for the current node.
 
         Parameters
         ----------
@@ -338,8 +340,6 @@ class JVPDiffArray(DiffArray):
         """
         Calculate the JVP or Jacobian matrix of self to x.
 
-        .. note::  JVP does not yet support higher order derivative.
-
         Parameters
         ----------
         x : JVPDiffArray
@@ -379,7 +379,8 @@ class JVPDiffArray(DiffArray):
             new_axes = old_axes[np.ndim(x) :] + old_axes[: np.ndim(x)]
             self._jacobian[x] = np.transpose(
                 np.reshape(
-                    np.stack(self._jacobian[x].values()), np.shape(x) + np.shape(self),
+                    np.stack(self._jacobian[x].values()),
+                    np.shape(x) + np.shape(self),
                 ),
                 new_axes,
             )

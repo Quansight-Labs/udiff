@@ -409,7 +409,7 @@ defvjp(np.transpose, grad_transpose)
 
 def repeat_to_match_shape(g, shape, dtype, axis, keepdims):
     """Returns the array g repeated along axis to fit vector space vs.
-        Also returns the number of repetitions of the array."""
+    Also returns the number of repetitions of the array."""
     with ua.set_backend(numpy_backend, coerce=True):
         if shape == ():
             return g, 1
